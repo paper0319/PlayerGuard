@@ -38,12 +38,7 @@ public class PlayerGuardCommand implements CommandExecutor, TabCompleter {
             }
 
             Player p = (Player) sender;
-            ProtectedRegion here = PGUtil.getCurrentPositionRegion(p);
-            if (here != null && here.getOwners().contains(p.getUniqueId())) {
-                new net.nekozouneko.playerguard.gui.RegionHubGUI(p, here).open();
-            } else {
-                new net.nekozouneko.playerguard.gui.RegionListGUI(p).open();
-            }
+            new net.nekozouneko.playerguard.gui.RegionListGUI(p).open();
             return true;
         }
 

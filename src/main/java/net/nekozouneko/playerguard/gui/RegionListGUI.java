@@ -15,6 +15,7 @@ import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.inventory.ItemStack;
 
 import java.util.*;
+import java.math.BigDecimal;
 
 public class RegionListGUI extends AbstractGUI {
 
@@ -104,7 +105,7 @@ public class RegionListGUI extends AbstractGUI {
         String roleLabel;
         switch (role) {
             case PRIMARY_OWNER: roleLabel = ChatColor.GOLD + "オーナー"; break;
-            case SUB_OWNER:     roleLabel = ChatColor.YELLOW + "副オーナー"; break;
+            case SUB_OWNER:     roleLabel = ChatColor.YELLOW + "サブオーナー"; break;
             default:            roleLabel = ChatColor.WHITE + "建築士"; break;
         }
 

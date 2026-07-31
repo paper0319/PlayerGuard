@@ -105,26 +105,26 @@ public class MemberActionGUI extends AbstractGUI {
         }
         inventory.setItem(SLOT_HEAD, head);
 
-        // Promote: 建築士 → 副オーナー
+        // Promote: 建築士 → サブオーナー
         if (canPromote(viewer, targetRole, rental)) {
             inventory.setItem(SLOT_PROMOTE, ItemStackBuilder.of(Material.EMERALD)
-                    .name(ChatColor.GREEN + "" + ChatColor.BOLD + "副オーナーに昇格")
+                    .name(ChatColor.GREEN + "" + ChatColor.BOLD + "サブオーナーに昇格")
                     .lore(
                         ChatColor.DARK_GRAY + "─────────────────",
-                        ChatColor.GRAY + "建築士 → " + ChatColor.GOLD + "副オーナー",
-                        ChatColor.DARK_GRAY + "副オーナー: " + ChatColor.GRAY + "メンバーの管理ができます",
+                        ChatColor.GRAY + "建築士 → " + ChatColor.GOLD + "サブオーナー",
+                        ChatColor.DARK_GRAY + "サブオーナー: " + ChatColor.GRAY + "メンバーの管理ができます",
                         ChatColor.DARK_GRAY + "─────────────────",
                         ChatColor.DARK_GRAY + "クリックで昇格"
                     ).build());
         }
 
-        // Demote: 副オーナー → 建築士
+        // Demote: サブオーナー → 建築士
         if (canDemote(viewer, targetRole)) {
             inventory.setItem(SLOT_DEMOTE, ItemStackBuilder.of(Material.GUNPOWDER)
                     .name(ChatColor.YELLOW + "" + ChatColor.BOLD + "建築士に降格")
                     .lore(
                         ChatColor.DARK_GRAY + "─────────────────",
-                        ChatColor.GRAY + "副オーナー → " + ChatColor.WHITE + "建築士",
+                        ChatColor.GRAY + "サブオーナー → " + ChatColor.WHITE + "建築士",
                         ChatColor.DARK_GRAY + "建築士: " + ChatColor.GRAY + "建築だけができます",
                         ChatColor.DARK_GRAY + "─────────────────",
                         ChatColor.DARK_GRAY + "クリックで降格"
@@ -164,7 +164,7 @@ public class MemberActionGUI extends AbstractGUI {
         if (rental) return ChatColor.YELLOW + "建築士（貸出中）";
         switch (role) {
             case PRIMARY_OWNER: return ChatColor.GOLD + "オーナー";
-            case SUB_OWNER:     return ChatColor.GOLD + "副オーナー";
+            case SUB_OWNER:     return ChatColor.GOLD + "サブオーナー";
             case BUILDER:       return ChatColor.WHITE + "建築士";
             default:            return ChatColor.GRAY + "非メンバー";
         }
@@ -197,7 +197,7 @@ public class MemberActionGUI extends AbstractGUI {
             case SLOT_PROMOTE:
                 if (canPromote(viewer, targetRole, rental)
                         && RegionRoles.promote(region, target) == RegionRoles.PromoteResult.PROMOTED) {
-                    getPlayer().sendMessage(PGMessages.success("%s を 副オーナー に昇格しました。", PGMessages.highlight(targetName())));
+                    getPlayer().sendMessage(PGMessages.success("%s を サブオーナー に昇格しました。", PGMessages.highlight(targetName())));
                     clickFeedbackAndBack();
                 } else init();
                 break;

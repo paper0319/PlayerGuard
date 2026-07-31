@@ -58,7 +58,7 @@ public class MemberGUI extends AbstractGUI {
         for (UUID uuid : region.getOwners().getUniqueIds()) {
             if (RegionRoles.roleOf(region, uuid) != Role.SUB_OWNER) continue;
             if (slot >= PAGE_SLOTS) break;
-            inventory.setItem(slot, memberHead(uuid, ChatColor.GOLD, "副オーナー", null));
+            inventory.setItem(slot, memberHead(uuid, ChatColor.GOLD, "サブオーナー", null));
             memberSlots.add(uuid);
             slot++;
         }
