@@ -6,6 +6,7 @@ folia-supported: true
 
 authors: [Taitaitatata, "Nekozouneko Group"]
 depend: [WorldGuard]
+softdepend: [Vault]
 website: "https://github.com/TeamNekozouneko/PlayerGuard"
 
 commands:

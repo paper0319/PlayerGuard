@@ -12,6 +12,7 @@ import org.bukkit.OfflinePlayer;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.inventory.InventoryClickEvent;
+import org.bukkit.inventory.ItemStack;
 
 import java.text.SimpleDateFormat;
 import java.util.Date;
@@ -20,12 +21,19 @@ import java.util.Locale;
 
 public class VisitorLogGUI extends AbstractGUI {
 
-    private static final int SIZE = 54;
+    private static final int SIZE      = 54;
     private static final int PAGE_SIZE = 45;
-    private static final int SLOT_PREV = 45;
-    private static final int SLOT_BACK = 49;
-    private static final int SLOT_NEXT = 53;
-    private static final SimpleDateFormat DATE_FORMAT = new SimpleDateFormat("MM/dd HH:mm:ss", Locale.JAPAN);
+
+    // Nav bar: [BACK(45)][G][PREV(47)][G][CLOSE(49)][G][NEXT(51)][G][G]
+    private static final int SLOT_BACK  = 45;
+    private static final int SLOT_PREV  = 47;
+    private static final int SLOT_CLOSE = 49;
+    private static final int SLOT_NEXT  = 51;
+
+    private static final SimpleDateFormat DATE_FORMAT =
+        new SimpleDateFormat("MM/dd HH:mm:ss", Locale.JAPAN);
+
+    private static final Material GLASS = Material.BLACK_STAINED_GLASS_PANE;
 
     private final ProtectedRegion region;
     private final String worldName;
@@ -44,8 +52,13 @@ public class VisitorLogGUI extends AbstractGUI {
             return;
         }
         if (inventory == null)
-            inventory = Bukkit.createInventory(this, SIZE, "■ 訪問者ログ: " + region.getId());
+            inventory = Bukkit.createInventory(this, SIZE,
+                ChatColor.AQUA + "■ " + ChatColor.WHITE + "訪問者ログ: " + region.getId());
         inventory.clear();
+
+        // Fill bottom nav bar with glass
+        ItemStack glass = ItemStackBuilder.of(GLASS).name(" ").build();
+        for (int i = PAGE_SIZE; i < SIZE; i++) inventory.setItem(i, glass);
 
         List<VisitorLogEntry> entries = PlayerGuard.getInstance().getVisitorLogService()
                 .getEntries(worldName, region.getId());
@@ -61,43 +74,59 @@ public class VisitorLogGUI extends AbstractGUI {
             inventory.setItem(i, toItem(entries.get(idx)));
         }
 
+        // Back (left-most)
+        inventory.setItem(SLOT_BACK, ItemStackBuilder.of(Material.ARROW)
+                .name(ChatColor.WHITE + "← 戻る")
+                .lore(ChatColor.DARK_GRAY + "前の画面へ")
+                .build());
+
         if (page > 0) {
             inventory.setItem(SLOT_PREV, ItemStackBuilder.of(Material.ARROW)
-                    .name(ChatColor.WHITE + "前のページ").build());
+                    .name(ChatColor.WHITE + "← 前のページ")
+                    .lore(ChatColor.DARK_GRAY + "ページ " + page + " へ")
+                    .build());
         }
-        inventory.setItem(SLOT_BACK, ItemStackBuilder.of(Material.ARROW)
-                .name(ChatColor.WHITE + "戻る").build());
+
+        inventory.setItem(SLOT_CLOSE, ItemStackBuilder.of(Material.BARRIER)
+                .name(ChatColor.RED + "" + ChatColor.BOLD + "閉じる")
+                .lore(ChatColor.DARK_GRAY + "インベントリを閉じる")
+                .build());
+
         if (page < maxPage) {
             inventory.setItem(SLOT_NEXT, ItemStackBuilder.of(Material.ARROW)
-                    .name(ChatColor.WHITE + "次のページ").build());
+                    .name(ChatColor.WHITE + "次のページ →")
+                    .lore(ChatColor.DARK_GRAY + "ページ " + (page + 2) + " へ")
+                    .build());
         }
     }
 
-    private org.bukkit.inventory.ItemStack toItem(VisitorLogEntry e) {
+    private ItemStack toItem(VisitorLogEntry e) {
         OfflinePlayer op = Bukkit.getOfflinePlayer(e.getPlayer());
-        String name = op.getName() != null ? op.getName() : e.getPlayer().toString();
-        String at = DATE_FORMAT.format(new Date(e.getAt()));
-        String type = typeLabel(e.getType());
+        String name   = op.getName() != null ? op.getName() : e.getPlayer().toString();
+        String at     = DATE_FORMAT.format(new Date(e.getAt()));
+        String type   = typeLabel(e.getType());
         String detail = e.getDetail() != null && !e.getDetail().isEmpty() ? e.getDetail() : "-";
 
         return ItemStackBuilder.of(Material.PAPER)
-                .name(ChatColor.WHITE + at + " " + name + " " + type)
+                .name(ChatColor.YELLOW + "" + ChatColor.BOLD + name)
                 .lore(
-                        ChatColor.GRAY + "領域: " + ChatColor.WHITE + region.getId(),
-                        ChatColor.GRAY + "詳細: " + ChatColor.WHITE + detail
-                )
-                .build();
+                    ChatColor.DARK_GRAY + "─────────────────",
+                    ChatColor.GRAY + "日時: " + ChatColor.WHITE + at,
+                    ChatColor.GRAY + "操作: " + ChatColor.WHITE + type,
+                    ChatColor.GRAY + "詳細: " + ChatColor.WHITE + detail,
+                    ChatColor.DARK_GRAY + "─────────────────"
+                ).build();
     }
 
     private String typeLabel(VisitorLogType type) {
         if (type == null) return "不明";
         switch (type) {
-            case ENTER: return "入場";
-            case EXIT: return "退場";
-            case BREAK: return "破壊";
-            case PLACE: return "設置";
+            case ENTER:    return "入場";
+            case EXIT:     return "退場";
+            case BREAK:    return "破壊";
+            case PLACE:    return "設置";
             case INTERACT: return "操作";
-            default: return "不明";
+            default:       return "不明";
         }
     }
 
@@ -107,18 +136,9 @@ public class VisitorLogGUI extends AbstractGUI {
         e.setCancelled(true);
 
         int slot = e.getRawSlot();
-        if (slot == SLOT_BACK) {
-            back();
-            return;
-        }
-        if (slot == SLOT_PREV) {
-            page--;
-            init();
-            return;
-        }
-        if (slot == SLOT_NEXT) {
-            page++;
-            init();
-        }
+        if (slot == SLOT_BACK)  { back(); return; }
+        if (slot == SLOT_CLOSE) { getPlayer().closeInventory(); return; }
+        if (slot == SLOT_PREV)  { page--; init(); return; }
+        if (slot == SLOT_NEXT)  { page++; init(); return; }
     }
 }

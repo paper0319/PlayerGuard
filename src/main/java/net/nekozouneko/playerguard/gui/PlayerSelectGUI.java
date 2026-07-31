@@ -18,8 +18,11 @@ import java.util.function.Consumer;
 
 /**
  * 渡されたプレイヤー候補をヘッドで一覧し、クリックで onSelect を呼ぶ汎用GUI。
+ * 戻るボタンはナビ行の左端（leftmost of nav row）に配置。
  */
 public class PlayerSelectGUI extends AbstractGUI {
+
+    private static final Material GLASS = Material.BLACK_STAINED_GLASS_PANE;
 
     private final String title;
     private final List<OfflinePlayer> candidates;
@@ -36,18 +39,31 @@ public class PlayerSelectGUI extends AbstractGUI {
 
     @Override
     public void init() {
-        int size = Math.min(54, ((Math.max(candidates.size(), 1) + 8) / 9) * 9 + 9);
+        int playerRows = candidates.isEmpty() ? 1 : (int) Math.ceil(candidates.size() / 9.0);
+        int totalRows  = Math.min(6, playerRows + 1);
+        int size       = totalRows * 9;
+
         if (inventory == null)
             inventory = Bukkit.createInventory(this, size, title);
         inventory.clear();
         slotOwners.clear();
 
+        int playerAreaSize = size - 9;
+
+        // Fill nav row with glass
+        ItemStack glass = ItemStackBuilder.of(GLASS).name(" ").build();
+        for (int i = playerAreaSize; i < size; i++) inventory.setItem(i, glass);
+
         int slot = 0;
         for (OfflinePlayer op : candidates) {
-            if (slot >= size - 9) break; // 最下段はボタン用に空ける
+            if (slot >= playerAreaSize) break;
             ItemStack head = ItemStackBuilder.of(Material.PLAYER_HEAD)
-                    .name(ChatColor.WHITE + (op.getName() != null ? op.getName() : op.getUniqueId().toString()))
-                    .build();
+                    .name(ChatColor.YELLOW + "" + ChatColor.BOLD
+                        + (op.getName() != null ? op.getName() : op.getUniqueId().toString()))
+                    .lore(
+                        ChatColor.DARK_GRAY + "─────────────────",
+                        ChatColor.DARK_GRAY + "クリックで選択"
+                    ).build();
             if (head.getItemMeta() instanceof SkullMeta) {
                 SkullMeta sm = (SkullMeta) head.getItemMeta();
                 sm.setOwningPlayer(op);
@@ -58,8 +74,10 @@ public class PlayerSelectGUI extends AbstractGUI {
             slot++;
         }
 
-        inventory.setItem(size - 1, ItemStackBuilder.of(Material.ARROW)
-                .name(ChatColor.WHITE + "戻る")
+        // Back at left-most of nav row
+        inventory.setItem(playerAreaSize, ItemStackBuilder.of(Material.ARROW)
+                .name(ChatColor.WHITE + "← 戻る")
+                .lore(ChatColor.DARK_GRAY + "前の画面へ")
                 .build());
     }
 
@@ -71,7 +89,8 @@ public class PlayerSelectGUI extends AbstractGUI {
         int slot = e.getRawSlot();
         if (slot < 0 || slot >= inventory.getSize()) return;
 
-        if (slot == inventory.getSize() - 1) {
+        int playerAreaSize = inventory.getSize() - 9;
+        if (slot == playerAreaSize) {  // back button (left-most of nav row)
             back();
             return;
         }

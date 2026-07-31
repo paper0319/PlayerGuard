@@ -21,12 +21,16 @@ import java.util.UUID;
 
 public class MemberActionGUI extends AbstractGUI {
 
-    private static final int SLOT_HEAD = 0;
-    private static final int SLOT_PROMOTE = 2;
-    private static final int SLOT_DEMOTE = 3;
-    private static final int SLOT_CANCEL_RENTAL = 4;
-    private static final int SLOT_REMOVE = 6;
-    private static final int SLOT_BACK = 8;
+    // Layout: [BACK][HEAD][GLASS][PROMOTE][DEMOTE][CANCEL_RENTAL][GLASS][REMOVE][GLASS]
+    //            0     1     2       3        4          5            6      7       8
+    private static final int SLOT_BACK          = 0;
+    private static final int SLOT_HEAD          = 1;
+    private static final int SLOT_PROMOTE       = 3;
+    private static final int SLOT_DEMOTE        = 4;
+    private static final int SLOT_CANCEL_RENTAL = 5;
+    private static final int SLOT_REMOVE        = 7;
+
+    private static final Material GLASS = Material.BLACK_STAINED_GLASS_PANE;
 
     private final ProtectedRegion region;
     private final UUID target;
@@ -64,18 +68,36 @@ public class MemberActionGUI extends AbstractGUI {
     @Override
     public void init() {
         if (inventory == null)
-            inventory = Bukkit.createInventory(this, 9, "■ メンバー操作");
+            inventory = Bukkit.createInventory(this, 9,
+                ChatColor.AQUA + "■ " + ChatColor.WHITE + "メンバー操作");
         inventory.clear();
 
-        Role viewer = RegionRoles.roleOf(region, getPlayer().getUniqueId());
-        Role targetRole = RegionRoles.roleOf(region, target);
-        boolean rental = RegionRentals.isRental(region, target);
+        // Fill all with glass
+        ItemStack glass = ItemStackBuilder.of(GLASS).name(" ").build();
+        for (int i = 0; i < 9; i++) inventory.setItem(i, glass);
 
+        Role viewer    = RegionRoles.roleOf(region, getPlayer().getUniqueId());
+        Role targetRole = RegionRoles.roleOf(region, target);
+        boolean rental  = RegionRentals.isRental(region, target);
+
+        // Back (left-most)
+        inventory.setItem(SLOT_BACK, ItemStackBuilder.of(Material.ARROW)
+                .name(ChatColor.WHITE + "← 戻る")
+                .lore(ChatColor.DARK_GRAY + "前の画面へ")
+                .build());
+
+        // Player head
+        String roleLbl = roleDisplayName(targetRole, rental);
+        String roleDesc = roleDescription(targetRole, rental);
         OfflinePlayer op = Bukkit.getOfflinePlayer(target);
         ItemStack head = ItemStackBuilder.of(Material.PLAYER_HEAD)
-                .name(ChatColor.WHITE + targetName())
-                .lore(ChatColor.GRAY + roleLabel(targetRole, rental))
-                .build();
+                .name(ChatColor.YELLOW + "" + ChatColor.BOLD + targetName())
+                .lore(
+                    ChatColor.DARK_GRAY + "─────────────────",
+                    ChatColor.GRAY + "役割: " + ChatColor.WHITE + roleLbl,
+                    ChatColor.GRAY + "  " + ChatColor.DARK_GRAY + "└ " + roleDesc,
+                    ChatColor.DARK_GRAY + "─────────────────"
+                ).build();
         if (head.getItemMeta() instanceof SkullMeta) {
             SkullMeta sm = (SkullMeta) head.getItemMeta();
             sm.setOwningPlayer(op);
@@ -83,37 +105,79 @@ public class MemberActionGUI extends AbstractGUI {
         }
         inventory.setItem(SLOT_HEAD, head);
 
+        // Promote: 建築士 → 副オーナー
         if (canPromote(viewer, targetRole, rental)) {
             inventory.setItem(SLOT_PROMOTE, ItemStackBuilder.of(Material.EMERALD)
-                    .name(ChatColor.GREEN + "subownerに昇格").build());
+                    .name(ChatColor.GREEN + "" + ChatColor.BOLD + "副オーナーに昇格")
+                    .lore(
+                        ChatColor.DARK_GRAY + "─────────────────",
+                        ChatColor.GRAY + "建築士 → " + ChatColor.GOLD + "副オーナー",
+                        ChatColor.DARK_GRAY + "副オーナー: " + ChatColor.GRAY + "メンバーの管理ができます",
+                        ChatColor.DARK_GRAY + "─────────────────",
+                        ChatColor.DARK_GRAY + "クリックで昇格"
+                    ).build());
         }
+
+        // Demote: 副オーナー → 建築士
         if (canDemote(viewer, targetRole)) {
             inventory.setItem(SLOT_DEMOTE, ItemStackBuilder.of(Material.GUNPOWDER)
-                    .name(ChatColor.YELLOW + "builderに降格").build());
+                    .name(ChatColor.YELLOW + "" + ChatColor.BOLD + "建築士に降格")
+                    .lore(
+                        ChatColor.DARK_GRAY + "─────────────────",
+                        ChatColor.GRAY + "副オーナー → " + ChatColor.WHITE + "建築士",
+                        ChatColor.DARK_GRAY + "建築士: " + ChatColor.GRAY + "建築だけができます",
+                        ChatColor.DARK_GRAY + "─────────────────",
+                        ChatColor.DARK_GRAY + "クリックで降格"
+                    ).build());
         }
+
+        // Cancel rental
         if (canCancelRental(viewer, rental)) {
             Long expiry = RegionRentals.getExpiry(region, target);
+            String remaining = expiry != null
+                    ? RegionRentals.formatRemaining(expiry - System.currentTimeMillis()) : "不明";
             inventory.setItem(SLOT_CANCEL_RENTAL, ItemStackBuilder.of(Material.CLOCK)
-                    .name(ChatColor.YELLOW + "貸出を解約")
-                    .lore(ChatColor.GRAY + "残り: " + (expiry != null
-                            ? RegionRentals.formatRemaining(expiry - System.currentTimeMillis()) : "不明"))
-                    .build());
+                    .name(ChatColor.YELLOW + "" + ChatColor.BOLD + "貸出を解約")
+                    .lore(
+                        ChatColor.DARK_GRAY + "─────────────────",
+                        ChatColor.GRAY + "残り時間: " + ChatColor.WHITE + remaining,
+                        ChatColor.DARK_GRAY + "─────────────────",
+                        ChatColor.DARK_GRAY + "クリックで解約"
+                    ).build());
         }
+
+        // Remove
         if (canRemove(viewer, targetRole, rental)) {
             inventory.setItem(SLOT_REMOVE, ItemStackBuilder.of(Material.RED_DYE)
-                    .name(ChatColor.RED + "メンバーから削除").build());
+                    .name(ChatColor.RED + "" + ChatColor.BOLD + "メンバーから削除")
+                    .lore(
+                        ChatColor.DARK_GRAY + "─────────────────",
+                        ChatColor.RED + "この操作は取り消せません",
+                        ChatColor.DARK_GRAY + "─────────────────",
+                        ChatColor.DARK_GRAY + "クリックで削除"
+                    ).build());
         }
-        inventory.setItem(SLOT_BACK, ItemStackBuilder.of(Material.ARROW)
-                .name(ChatColor.WHITE + "戻る").build());
     }
 
-    private String roleLabel(Role role, boolean rental) {
-        if (rental) return "貸出中builder";
+    /** 表示用の役割名（子供でもわかる名前） */
+    private String roleDisplayName(Role role, boolean rental) {
+        if (rental) return ChatColor.YELLOW + "建築士（貸出中）";
         switch (role) {
-            case PRIMARY_OWNER: return "主オーナー";
-            case SUB_OWNER: return "subowner";
-            case BUILDER: return "builder";
-            default: return "非メンバー";
+            case PRIMARY_OWNER: return ChatColor.GOLD + "オーナー";
+            case SUB_OWNER:     return ChatColor.GOLD + "副オーナー";
+            case BUILDER:       return ChatColor.WHITE + "建築士";
+            default:            return ChatColor.GRAY + "非メンバー";
+        }
+    }
+
+    /** 役割の一言説明 */
+    private String roleDescription(Role role, boolean rental) {
+        if (rental) return ChatColor.GRAY + "期間限定で建築できます";
+        switch (role) {
+            case PRIMARY_OWNER: return ChatColor.GRAY + "領域のすべてを管理できます";
+            case SUB_OWNER:     return ChatColor.GRAY + "メンバーの管理ができます";
+            case BUILDER:       return ChatColor.GRAY + "領域の中で建築できます";
+            default:            return "";
         }
     }
 
@@ -122,22 +186,25 @@ public class MemberActionGUI extends AbstractGUI {
         if (e.getInventory().getHolder() != this) return;
         e.setCancelled(true);
 
-        Role viewer = RegionRoles.roleOf(region, getPlayer().getUniqueId());
+        Role viewer    = RegionRoles.roleOf(region, getPlayer().getUniqueId());
         Role targetRole = RegionRoles.roleOf(region, target);
-        boolean rental = RegionRentals.isRental(region, target);
+        boolean rental  = RegionRentals.isRental(region, target);
 
         switch (e.getRawSlot()) {
+            case SLOT_BACK:
+                back();
+                break;
             case SLOT_PROMOTE:
                 if (canPromote(viewer, targetRole, rental)
                         && RegionRoles.promote(region, target) == RegionRoles.PromoteResult.PROMOTED) {
-                    getPlayer().sendMessage(PGMessages.success("%s を subowner に昇格しました。", PGMessages.highlight(targetName())));
+                    getPlayer().sendMessage(PGMessages.success("%s を 副オーナー に昇格しました。", PGMessages.highlight(targetName())));
                     clickFeedbackAndBack();
                 } else init();
                 break;
             case SLOT_DEMOTE:
                 if (canDemote(viewer, targetRole)
                         && RegionRoles.demote(region, target) == RegionRoles.DemoteResult.DEMOTED) {
-                    getPlayer().sendMessage(PGMessages.success("%s を builder に降格しました。", PGMessages.highlight(targetName())));
+                    getPlayer().sendMessage(PGMessages.success("%s を 建築士 に降格しました。", PGMessages.highlight(targetName())));
                     clickFeedbackAndBack();
                 } else init();
                 break;
@@ -154,9 +221,6 @@ public class MemberActionGUI extends AbstractGUI {
                     getPlayer().sendMessage(PGMessages.success("%s をメンバーから削除しました。", PGMessages.highlight(targetName())));
                     clickFeedbackAndBack();
                 } else init();
-                break;
-            case SLOT_BACK:
-                back();
                 break;
             default:
                 break;

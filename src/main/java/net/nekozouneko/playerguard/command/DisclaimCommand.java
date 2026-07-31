@@ -19,6 +19,8 @@ import org.bukkit.entity.Player;
 
 import java.util.Collections;
 import java.util.List;
+import java.math.BigDecimal;
+import net.nekozouneko.playerguard.paid.ProtectionPaymentRecord;
 
 public class DisclaimCommand implements CommandExecutor, TabCompleter {
 
@@ -74,6 +76,13 @@ public class DisclaimCommand implements CommandExecutor, TabCompleter {
         final ProtectedRegion region = pr;
         ConfirmCommand.addConfirm(p.getUniqueId(), () ->
             PlayerGuard.getInstance().getScheduler().runGlobal(() -> {
+                PlayerGuard plugin = PlayerGuard.getInstance();
+                ProtectionPaymentRecord payment = plugin.getProtectionPaymentRepository().find(region);
+                if (plugin.getPaidExtensionConfig().allowRefundOnDelete() && payment != null && !payment.refunded() && payment.amountPaid().signum() > 0 && payment.owner().equals(p.getUniqueId())) {
+                    BigDecimal refund = payment.amountPaid().multiply(plugin.getPaidExtensionConfig().refundRate());
+                    if (!plugin.getEconomyTransactionService().available() || !plugin.getEconomyTransactionService().deposit(p, refund)) { sender.sendMessage("§c返金に失敗したため、土地保護を削除しませんでした。"); return; }
+                    plugin.getProtectionPaymentRepository().save(region, payment.refund());
+                }
                 if (PlayerGuard.getInstance().getVisitorLogService() != null)
                     PlayerGuard.getInstance().getVisitorLogService().clearByRegionId(region.getId());
                 manager.removeRegion(region.getId());

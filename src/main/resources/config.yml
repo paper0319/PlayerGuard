@@ -15,6 +15,15 @@ protection:
     6: 90000    # プレイ6日目以降
     7: 100000   # プレイ7日目以降（以降は新しいキーを追記すると拡張できる）
 
+  paid-extension:
+    enabled: true
+    rates:
+      100000: 0.1
+      150000: 0.2
+      200000: 0.5
+    allow-refund-on-delete: true
+    refund-rate: 0.5
+
   flags:
     break: true
     place: true

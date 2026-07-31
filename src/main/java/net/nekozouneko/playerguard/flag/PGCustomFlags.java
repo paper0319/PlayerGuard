@@ -12,6 +12,8 @@ public final class PGCustomFlags {
 
     /** 主オーナーのUUID文字列。 */
     public static StringFlag PRIMARY_OWNER = new StringFlag("pg-primary-owner");
+    /** Payment history serialized with the protected region. */
+    public static StringFlag PAYMENT_RECORD = new StringFlag("pg-payment-record");
     /** 貸出エントリ "&lt;uuid&gt;:&lt;期限epochミリ秒&gt;" の集合。 */
     public static SetFlag<String> RENTALS = new SetFlag<>("pg-rentals", new StringFlag(null));
 

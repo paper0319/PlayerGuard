@@ -22,11 +22,16 @@ import java.util.UUID;
 
 public class MemberGUI extends AbstractGUI {
 
-    private static final int SIZE = 54;
-    private static final int SLOT_ADD = 46;
-    private static final int SLOT_RENT = 48;
-    private static final int SLOT_TRANSFER = 50;
-    private static final int SLOT_BACK = 53;
+    private static final int SIZE      = 54;
+    private static final int PAGE_SLOTS = 45;
+
+    // Bottom bar: [BACK(45)][G][ADD(47)][G][RENT(49)][G][TRANSFER(51)][G][G]
+    private static final int SLOT_BACK     = 45;
+    private static final int SLOT_ADD      = 47;
+    private static final int SLOT_RENT     = 49;
+    private static final int SLOT_TRANSFER = 51;
+
+    private static final Material GLASS = Material.BLACK_STAINED_GLASS_PANE;
 
     private final ProtectedRegion region;
     private final List<UUID> memberSlots = new ArrayList<>();
@@ -39,50 +44,82 @@ public class MemberGUI extends AbstractGUI {
     @Override
     public void init() {
         if (inventory == null)
-            inventory = Bukkit.createInventory(this, SIZE, "■ メンバー管理");
+            inventory = Bukkit.createInventory(this, SIZE,
+                ChatColor.AQUA + "■ " + ChatColor.WHITE + "メンバー管理");
         inventory.clear();
         memberSlots.clear();
+
+        // Fill action bar with glass
+        ItemStack glass = ItemStackBuilder.of(GLASS).name(" ").build();
+        for (int i = PAGE_SLOTS; i < SIZE; i++) inventory.setItem(i, glass);
 
         long now = System.currentTimeMillis();
         int slot = 0;
         for (UUID uuid : region.getOwners().getUniqueIds()) {
             if (RegionRoles.roleOf(region, uuid) != Role.SUB_OWNER) continue;
-            if (slot >= SIZE - 9) break;
-            inventory.setItem(slot, memberHead(uuid, ChatColor.GOLD, "subowner", null));
+            if (slot >= PAGE_SLOTS) break;
+            inventory.setItem(slot, memberHead(uuid, ChatColor.GOLD, "副オーナー", null));
             memberSlots.add(uuid);
             slot++;
         }
         for (UUID uuid : region.getMembers().getUniqueIds()) {
-            if (slot >= SIZE - 9) break;
+            if (slot >= PAGE_SLOTS) break;
             Long expiry = RegionRentals.getExpiry(region, uuid);
             String rentalLore = expiry != null
-                    ? "貸出中: あと" + RegionRentals.formatRemaining(expiry - now) : null;
-            inventory.setItem(slot, memberHead(uuid, ChatColor.WHITE, "builder", rentalLore));
+                    ? "貸出中: あと " + RegionRentals.formatRemaining(expiry - now) : null;
+            String roleLabel = expiry != null ? "建築士（貸出中）" : "建築士";
+            inventory.setItem(slot, memberHead(uuid, ChatColor.WHITE, roleLabel, rentalLore));
             memberSlots.add(uuid);
             slot++;
         }
 
+        // Back (left-most of bottom bar)
+        inventory.setItem(SLOT_BACK, ItemStackBuilder.of(Material.ARROW)
+                .name(ChatColor.WHITE + "← 戻る")
+                .lore(ChatColor.DARK_GRAY + "前の画面へ")
+                .build());
+
         inventory.setItem(SLOT_ADD, ItemStackBuilder.of(Material.LIME_DYE)
-                .name(ChatColor.GREEN + "メンバーを追加").build());
+                .name(ChatColor.GREEN + "" + ChatColor.BOLD + "メンバーを追加")
+                .lore(
+                    ChatColor.DARK_GRAY + "─────────────────",
+                    ChatColor.GRAY + "オンラインプレイヤーを建築士として追加",
+                    ChatColor.DARK_GRAY + "─────────────────",
+                    ChatColor.DARK_GRAY + "クリックで選択"
+                ).build());
+
         inventory.setItem(SLOT_RENT, ItemStackBuilder.of(Material.CLOCK)
-                .name(ChatColor.YELLOW + "建築権を貸し出す").build());
+                .name(ChatColor.YELLOW + "" + ChatColor.BOLD + "建築権を貸し出す")
+                .lore(
+                    ChatColor.DARK_GRAY + "─────────────────",
+                    ChatColor.GRAY + "期間限定で建築士権限を付与",
+                    ChatColor.DARK_GRAY + "─────────────────",
+                    ChatColor.DARK_GRAY + "クリックで選択"
+                ).build());
+
         Role viewerRole = RegionRoles.roleOf(region, getPlayer().getUniqueId());
         if (viewerRole == Role.PRIMARY_OWNER || (viewerRole == Role.SUB_OWNER && PGConfig.allowSubownerTransfer())) {
             inventory.setItem(SLOT_TRANSFER, ItemStackBuilder.of(Material.GOLDEN_APPLE)
-                    .name(ChatColor.GOLD + "領域を譲渡").build());
+                    .name(ChatColor.GOLD + "" + ChatColor.BOLD + "領域を譲渡")
+                    .lore(
+                        ChatColor.DARK_GRAY + "─────────────────",
+                        ChatColor.RED + "この操作は取り消せません",
+                        ChatColor.DARK_GRAY + "─────────────────",
+                        ChatColor.DARK_GRAY + "クリックで選択"
+                    ).build());
         }
-        inventory.setItem(SLOT_BACK, ItemStackBuilder.of(Material.ARROW)
-                .name(ChatColor.WHITE + "戻る").build());
     }
 
     private ItemStack memberHead(UUID uuid, ChatColor nameColor, String roleLabel, String extraLore) {
         OfflinePlayer op = Bukkit.getOfflinePlayer(uuid);
         List<String> lore = new ArrayList<>();
-        lore.add(ChatColor.GRAY + roleLabel);
+        lore.add(ChatColor.DARK_GRAY + "─────────────────");
+        lore.add(ChatColor.GRAY + "役割: " + ChatColor.WHITE + roleLabel);
         if (extraLore != null) lore.add(ChatColor.YELLOW + extraLore);
-        lore.add(ChatColor.GRAY + "クリックで操作");
+        lore.add(ChatColor.DARK_GRAY + "─────────────────");
+        lore.add(ChatColor.DARK_GRAY + "クリックで操作");
         ItemStack head = ItemStackBuilder.of(Material.PLAYER_HEAD)
-                .name(nameColor + (op.getName() != null ? op.getName() : uuid.toString()))
+                .name(nameColor + "" + ChatColor.BOLD + (op.getName() != null ? op.getName() : uuid.toString()))
                 .lore(lore.toArray(new String[0]))
                 .build();
         if (head.getItemMeta() instanceof SkullMeta) {
@@ -101,18 +138,9 @@ public class MemberGUI extends AbstractGUI {
         int slot = e.getRawSlot();
         if (slot < 0 || slot >= SIZE) return;
 
-        if (slot == SLOT_BACK) {
-            back();
-            return;
-        }
-        if (slot == SLOT_ADD) {
-            openAddSelector();
-            return;
-        }
-        if (slot == SLOT_RENT) {
-            openRentSelector();
-            return;
-        }
+        if (slot == SLOT_BACK)     { back(); return; }
+        if (slot == SLOT_ADD)      { openAddSelector(); return; }
+        if (slot == SLOT_RENT)     { openRentSelector(); return; }
         if (slot == SLOT_TRANSFER) {
             Role viewerRole = RegionRoles.roleOf(region, getPlayer().getUniqueId());
             if (viewerRole == Role.PRIMARY_OWNER || (viewerRole == Role.SUB_OWNER && PGConfig.allowSubownerTransfer())) {

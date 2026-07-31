@@ -16,10 +16,20 @@ import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.persistence.PersistentDataContainer;
 
-import java.util.Arrays;
-import java.util.List;
+import java.util.*;
 
-public class MenuGUI extends AbstractGUI{
+public class MenuGUI extends AbstractGUI {
+
+    private static final int INV_SIZE = 54;
+    private static final Material BORDER = Material.BLACK_STAINED_GLASS_PANE;
+    private static final Material SEP_BG = Material.GRAY_STAINED_GLASS_PANE;
+    private static final Material CAT_ICON = Material.CYAN_STAINED_GLASS_PANE;
+
+    private static final Map<Integer, String> CATEGORY_NAMES = new LinkedHashMap<>();
+    static {
+        CATEGORY_NAMES.put(1, "プレイヤー操作");
+        CATEGORY_NAMES.put(2, "環境・ワールド");
+    }
 
     private final ProtectedRegion region;
 
@@ -34,37 +44,82 @@ public class MenuGUI extends AbstractGUI{
 
     @Override
     public void init() {
-        GuardFlags[] values = GuardFlags.values();
-
-        int maxRow = 1;
-        for (GuardFlags gf : values) {
-            maxRow = Math.max(maxRow, gf.getGuiRow());
-        }
-        int size = Math.min(54, maxRow * 9);
-
         if (inventory == null)
-            inventory = Bukkit.createInventory(this, size, "■ 権限を管理");
+            inventory = Bukkit.createInventory(this, INV_SIZE, ChatColor.AQUA + "■ " + ChatColor.WHITE + "権限を管理");
         inventory.clear();
+
+        // Fill everything with border glass as background
+        ItemStack border = ItemStackBuilder.of(BORDER).name(" ").build();
+        for (int i = 0; i < INV_SIZE; i++) {
+            inventory.setItem(i, border);
+        }
 
         NamespacedKey key = new NamespacedKey(PlayerGuard.getInstance(), "flag");
 
-        // 各フラグを guiRow で指定された行に左詰めで配置する
-        int[] column = new int[maxRow + 1];
-        for (GuardFlags gf : values) {
-            int slot = (gf.getGuiRow() - 1) * 9 + column[gf.getGuiRow()]++;
-            if (slot < 0 || slot >= size) continue;
-
-            ItemStack item = ItemStackBuilder.of(gf.getIcon())
-                    .name(ChatColor.WHITE + gf.getDisplayName())
-                    .lore(ChatColor.GRAY + "状態："+stateToJapanese(GuardFlags.getState(region, gf)))
-                    .persistentData(key, new EnumDataType<>(GuardFlags.class), gf)
-                    .build();
-            inventory.setItem(slot, item);
+        // Group flags by guiRow, preserving declaration order
+        Map<Integer, List<GuardFlags>> byRow = new LinkedHashMap<>();
+        for (GuardFlags gf : GuardFlags.values()) {
+            byRow.computeIfAbsent(gf.getGuiRow(), k -> new ArrayList<>()).add(gf);
         }
 
+        boolean isFirst = true;
+        for (Map.Entry<Integer, List<GuardFlags>> entry : byRow.entrySet()) {
+            int guiRow = entry.getKey();
+            List<GuardFlags> flags = entry.getValue();
+
+            int contentVisualRow;
+            if (isFirst) {
+                contentVisualRow = 1;
+                isFirst = false;
+
+                // First category label at top border center
+                String catName = CATEGORY_NAMES.getOrDefault(guiRow, "設定");
+                inventory.setItem(4, ItemStackBuilder.of(CAT_ICON)
+                        .name(ChatColor.AQUA + "" + ChatColor.BOLD + "◆ " + catName)
+                        .build());
+            } else {
+                // Separator row before this category
+                int sepVisualRow = (guiRow - 1) * 2;
+                contentVisualRow = sepVisualRow + 1;
+
+                int sepOffset = sepVisualRow * 9;
+                ItemStack sep = ItemStackBuilder.of(SEP_BG).name(" ").build();
+                for (int i = 0; i < 9; i++) {
+                    inventory.setItem(sepOffset + i, sep);
+                }
+
+                // Category label at center of separator row
+                String catName = CATEGORY_NAMES.getOrDefault(guiRow, "設定");
+                inventory.setItem(sepOffset + 4, ItemStackBuilder.of(CAT_ICON)
+                        .name(ChatColor.AQUA + "" + ChatColor.BOLD + "◆ " + catName)
+                        .build());
+            }
+
+            // Place items centered in their content row
+            int offset = contentVisualRow * 9;
+            int startCol = (9 - flags.size()) / 2;
+            for (int i = 0; i < flags.size(); i++) {
+                GuardFlags gf = flags.get(i);
+                GuardFlags.State state = GuardFlags.getState(region, gf);
+
+                ItemStack item = ItemStackBuilder.of(gf.getIcon())
+                        .name(ChatColor.YELLOW + "" + ChatColor.BOLD + gf.getDisplayName())
+                        .lore(
+                            ChatColor.DARK_GRAY + "─────────────────",
+                            ChatColor.GRAY + "状態：" + stateToColored(state),
+                            ChatColor.DARK_GRAY + "─────────────────",
+                            ChatColor.DARK_GRAY + "クリックで切り替え"
+                        )
+                        .persistentData(key, new EnumDataType<>(GuardFlags.class), gf)
+                        .build();
+                inventory.setItem(offset + startCol + i, item);
+            }
+        }
+
+        // Back button at bottom-left (slot 45)
         if (getParent() != null) {
-            inventory.setItem(size - 1, ItemStackBuilder.of(Material.ARROW)
-                    .name(ChatColor.WHITE + "戻る")
+            inventory.setItem(45, ItemStackBuilder.of(Material.ARROW)
+                    .name(ChatColor.WHITE + "← 戻る")
                     .build());
         }
     }
@@ -116,8 +171,7 @@ public class MenuGUI extends AbstractGUI{
                 region.setFlag(sff, null);
                 region.setFlag(sff.getRegionGroupFlag(), RegionGroup.NONE);
             }
-        }
-        else {
+        } else {
             boolean b = state == GuardFlags.State.ALLOW;
             for (StateFlag sff : flag.getFlags()) {
                 region.setFlag(sff, PGUtil.boolToState(!b));
@@ -130,18 +184,13 @@ public class MenuGUI extends AbstractGUI{
         init();
     }
 
-    private String stateToJapanese(GuardFlags.State state) {
+    private String stateToColored(GuardFlags.State state) {
         switch (state) {
-            case ALLOW:
-                return "許可";
-            case DENY:
-                return "拒否";
-            case SOME_CHANGED:
-                return "管理者により変更されています";
-            case UNSET:
-                return "設定解除";
+            case ALLOW:        return ChatColor.GREEN + "✔ 許可";
+            case DENY:         return ChatColor.RED + "✘ 拒否";
+            case SOME_CHANGED: return ChatColor.GOLD + "⚠ 管理者設定";
+            case UNSET:        return ChatColor.GRAY + "◉ 設定解除";
         }
-
-        return "不明";
+        return ChatColor.DARK_GRAY + "不明";
     }
 }

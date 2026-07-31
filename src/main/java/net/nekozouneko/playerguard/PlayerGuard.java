@@ -19,6 +19,10 @@ import net.nekozouneko.playerguard.flag.PGCustomFlags;
 import net.nekozouneko.playerguard.listener.PlayerChangedWorldListener;
 import net.nekozouneko.playerguard.listener.PlayerInteractListener;
 import net.nekozouneko.playerguard.listener.VisitorLogListener;
+import net.nekozouneko.playerguard.paid.EconomyTransactionService;
+import net.nekozouneko.playerguard.paid.PaidExtensionConfig;
+import net.nekozouneko.playerguard.paid.ProtectionPaymentRepository;
+import net.nekozouneko.playerguard.paid.ProgressivePricingService;
 import net.nekozouneko.playerguard.scheduler.PGScheduler;
 import net.nekozouneko.playerguard.selection.SelectionStorage;
 import net.nekozouneko.playerguard.task.ActionbarTask;
@@ -31,6 +35,8 @@ import org.bukkit.Statistic;
 import org.bukkit.entity.Player;
 import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.plugin.java.JavaPlugin;
+import org.bukkit.plugin.RegisteredServiceProvider;
+import net.milkbowl.vault.economy.Economy;
 
 public final class PlayerGuard extends JavaPlugin {
 
@@ -48,6 +54,10 @@ public final class PlayerGuard extends JavaPlugin {
     private VisitorLogService visitorLogService;
     @Getter
     private PGScheduler scheduler;
+    @Getter private PaidExtensionConfig paidExtensionConfig;
+    @Getter private ProgressivePricingService progressivePricingService;
+    @Getter private EconomyTransactionService economyTransactionService;
+    @Getter private ProtectionPaymentRepository protectionPaymentRepository;
 
     @Override
     public void onLoad() {
@@ -89,6 +99,14 @@ public final class PlayerGuard extends JavaPlugin {
         }
 
         try {
+            registry.register(PGCustomFlags.PAYMENT_RECORD);
+        } catch (FlagConflictException fce) {
+            Flag<?> alreadyRegistered = registry.get("pg-payment-record");
+            if (alreadyRegistered instanceof StringFlag) PGCustomFlags.PAYMENT_RECORD = (StringFlag) alreadyRegistered;
+            else throw fce;
+        }
+
+        try {
             registry.register(PGCustomFlags.RENTALS);
         }
         catch (FlagConflictException fce) {
@@ -109,6 +127,7 @@ public final class PlayerGuard extends JavaPlugin {
         saveDefaultConfig();
         getConfig().options().copyDefaults(true);
         PGConfig.setConfig(getConfig());
+        reloadPaidExtensionServices();
 
         if (PGConfig.isVisitorLogEnabled()) {
             visitorLogService = new VisitorLogService(this, PGConfig.getVisitorLogMaxEntriesPerRegion());
@@ -151,9 +170,20 @@ public final class PlayerGuard extends JavaPlugin {
         ConfirmCommand.clearConfirms();
     }
 
+    private void reloadPaidExtensionServices() {
+        paidExtensionConfig = PaidExtensionConfig.load(getConfig(), getLogger());
+        progressivePricingService = new ProgressivePricingService(paidExtensionConfig.rates());
+        protectionPaymentRepository = new ProtectionPaymentRepository();
+        RegisteredServiceProvider<Economy> provider = getServer().getServicesManager().getRegistration(Economy.class);
+        economyTransactionService = new EconomyTransactionService(provider == null ? null : provider.getProvider());
+        if (paidExtensionConfig.enabled() && !economyTransactionService.available())
+            getLogger().warning("Paid extension is enabled but no Vault Economy provider is available; paid claims are disabled.");
+    }
+
     public void reload() {
         reloadConfig();
         PGConfig.setConfig(getConfig());
+        reloadPaidExtensionServices();
     }
 
     public long getProtectLimit(Player player) {
