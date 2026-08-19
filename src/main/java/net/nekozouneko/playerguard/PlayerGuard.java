@@ -163,7 +163,7 @@ public final class PlayerGuard extends JavaPlugin {
         NamespacedKey key = new NamespacedKey(this, "limit-extends");
         Long extend = player.getPersistentDataContainer().get(key, PersistentDataType.LONG);
 
-        if (extend != null) {
+        if (extend != null && limit != -1) {
             return limit + extend;
         }
 

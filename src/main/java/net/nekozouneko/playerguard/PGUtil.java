@@ -9,7 +9,6 @@ import com.sk89q.worldguard.protection.regions.GlobalProtectedRegion;
 import com.sk89q.worldguard.protection.regions.ProtectedCuboidRegion;
 import com.sk89q.worldguard.protection.regions.ProtectedRegion;
 import com.sk89q.worldguard.protection.regions.RegionContainer;
-import com.sk89q.worldguard.protection.util.WorldEditRegionConverter;
 import org.bukkit.Bukkit;
 import org.bukkit.World;
 import org.bukkit.entity.Player;
@@ -17,7 +16,6 @@ import org.bukkit.entity.Player;
 import java.util.AbstractMap;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.stream.IntStream;
 
 public final class PGUtil {
     private PGUtil() {}
@@ -105,5 +103,15 @@ public final class PGUtil {
 
     public static long delta(long a, long b) {
         return Math.abs(a - b);
+    }
+
+    public static boolean classExists(String className) {
+        try {
+            Class.forName(className);
+            return true;
+        }
+        catch (ClassNotFoundException e) {
+            return false;
+        }
     }
 }

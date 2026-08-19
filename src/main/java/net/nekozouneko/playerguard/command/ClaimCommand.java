@@ -16,10 +16,8 @@ import net.nekozouneko.playerguard.PGMessages;
 import net.nekozouneko.playerguard.PGUtil;
 import net.nekozouneko.playerguard.PlayerGuard;
 import net.nekozouneko.playerguard.flag.GuardFlags;
-import net.nekozouneko.playerguard.flag.GuardRegisteredFlag;
 import net.nekozouneko.playerguard.region.RegionRoles;
 import net.nekozouneko.playerguard.selection.SelectionStorage;
-import org.bukkit.Bukkit;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
@@ -57,7 +55,7 @@ public class ClaimCommand implements CommandExecutor, TabCompleter {
             return true;
         }
 
-        if (limit <= used + cr.getVolume()) {
+        if (limit <= used + cr.getVolume() && limit != -1) {
             ss.clear(p.getUniqueId());
             p.sendMessage(PGMessages.error(
                     "保護上限を超えています。使用量: %s / 追加分: %s / 上限: %s",
@@ -125,10 +123,11 @@ public class ClaimCommand implements CommandExecutor, TabCompleter {
             rm.addRegion(protect);
             ss.clear(p.getUniqueId());
 
+            Object remaining = limit == -1 ? "無制限" : (limit - (used + protect.volume()));
             p.sendMessage(PGMessages.success(
                     "保護領域 %s を作成しました。残り保護量: %s ブロック",
                     PGMessages.highlight(regionId),
-                    PGMessages.highlight(limit - (used + protect.volume()))
+                    PGMessages.highlight(remaining)
             ));
         });
 

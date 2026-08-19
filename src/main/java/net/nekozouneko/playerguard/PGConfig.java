@@ -4,9 +4,6 @@ import net.nekozouneko.playerguard.flag.GuardFlags;
 import org.bukkit.configuration.Configuration;
 import org.bukkit.configuration.ConfigurationSection;
 
-import java.util.HashSet;
-import java.util.Set;
-
 public class PGConfig {
 
     private static Configuration config;
