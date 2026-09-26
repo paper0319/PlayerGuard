@@ -6,6 +6,8 @@ import org.junit.jupiter.api.Test;
 import java.io.StringReader;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class PGConfigTest {
 
@@ -63,6 +65,31 @@ class PGConfigTest {
 
         assertEquals(110000, PGConfig.getLimit(8));
         assertEquals(110000, PGConfig.getLimit(100), "8日目追記後は最上位が 8 ティアに更新される");
+    }
+
+    @Test
+    void deniedEntryRelocationDefaultsWhenSectionMissing() {
+        YamlConfiguration cfg = load(DEFAULTS);
+        PGConfig.setConfig(cfg);
+
+        assertTrue(PGConfig.isDeniedEntryRelocationEnabled());
+        assertEquals(8, PGConfig.getDeniedEntryRelocationSearchRadius());
+        assertEquals(48, PGConfig.getDeniedEntryRelocationSearchDown());
+    }
+
+    @Test
+    void deniedEntryRelocationClampsSearchRange() {
+        YamlConfiguration cfg = load(
+                DEFAULTS +
+                "  denied-entry-relocation:\n" +
+                "    enabled: false\n" +
+                "    search-radius: 99\n" +
+                "    search-down: 1\n");
+        PGConfig.setConfig(cfg);
+
+        assertFalse(PGConfig.isDeniedEntryRelocationEnabled());
+        assertEquals(16, PGConfig.getDeniedEntryRelocationSearchRadius());
+        assertEquals(8, PGConfig.getDeniedEntryRelocationSearchDown());
     }
 
     @Test

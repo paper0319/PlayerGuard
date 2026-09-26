@@ -1,6 +1,7 @@
 package net.nekozouneko.playerguard;
 
 import net.nekozouneko.playerguard.flag.GuardFlags;
+import net.nekozouneko.playerguard.paid.CreationConfirmationMode;
 import org.bukkit.configuration.Configuration;
 import org.bukkit.configuration.ConfigurationSection;
 
@@ -94,6 +95,58 @@ public class PGConfig {
 
     public static boolean isVisitorLogInteractEnabled() {
         return config.getBoolean("visitor-log.events.interact", true);
+    }
+
+
+    public static CreationConfirmationMode getDefaultCreationConfirmationMode() {
+        return CreationConfirmationMode.parse(config.getString("protection.creation-confirmation.default-mode", "GUI"));
+    }
+
+    public static int getChatConfirmationTimeoutSeconds() {
+        return clamp(config.getInt("protection.creation-confirmation.chat-timeout-seconds", 600), 10, 600);
+    }
+
+    public static boolean isDeniedEntryRelocationEnabled() {
+        return config.getBoolean("protection.denied-entry-relocation.enabled", true);
+    }
+
+    public static boolean isBlacklistEnabled() {
+        return config.getBoolean("protection.blacklist.enabled", true);
+    }
+
+    public static int getDeniedEntryRelocationSearchRadius() {
+        return clamp(config.getInt("protection.denied-entry-relocation.search-radius", 8), 2, 16);
+    }
+
+    public static int getDeniedEntryRelocationSearchDown() {
+        return clamp(config.getInt("protection.denied-entry-relocation.search-down", 48), 8, 128);
+    }
+
+    public static boolean isProtectionTeleportEnabled() {
+        return config.getBoolean("protection.teleport.enabled", true);
+    }
+
+    public static java.math.BigDecimal getTeleportSetupCost() {
+        return java.math.BigDecimal.valueOf(Math.max(0D, config.getDouble("protection.teleport.setup-cost", 1000.0))).setScale(2, java.math.RoundingMode.HALF_UP);
+    }
+
+    public static java.math.BigDecimal getTeleportCost() {
+        return java.math.BigDecimal.valueOf(Math.max(0D, config.getDouble("protection.teleport.teleport-cost", 300.0))).setScale(2, java.math.RoundingMode.HALF_UP);
+    }
+    public static boolean isProtectionLogEnabled() {
+        return config.getBoolean("protection.logs.enabled", true);
+    }
+
+    public static int getProtectionLogMaxEntries() {
+        return clamp(config.getInt("protection.logs.max-entries-per-protection", 1000), 10, 10000);
+    }
+
+    public static boolean isProtectionVisitorLogEnabled() {
+        return config.getBoolean("protection.logs.visitor-log-enabled", true);
+    }
+
+    public static int getProtectionVisitorLogMaxEntries() {
+        return clamp(config.getInt("protection.logs.visitor-log-max-entries", 300), 10, 5000);
     }
 
     public static boolean allowSubownerViewVisitorLog() {

@@ -59,7 +59,7 @@ public class TransferCommand extends SubCommand {
         if (!canTransfer(region, player.getUniqueId())) {
             sender.sendMessage(PGMessages.error(
                     (PGConfig.allowSubownerTransfer()
-                    ? "領域を譲渡できるのは主オーナーまたはsubownerのみです。"
+                    ? "領域を譲渡できるのは主オーナーまたはサブオーナーのみです。"
                     : "領域を譲渡できるのは主オーナーのみです。")
             ));
             return true;
@@ -77,19 +77,26 @@ public class TransferCommand extends SubCommand {
 
     /**
      * region を transferTo へ譲渡するリクエストを発行する。
-     * 上限超過時は false を返す。受理は ConfirmCommand 経由。
+     * 有料保護が無効な場合、受取人の無料枠を超えると false を返す。
+     * 有料保護が有効な場合は追加料金なしで譲渡でき、体積は受取人の所有量に加算される。
+     * 受理は ConfirmCommand 経由。
      */
     public static boolean requestTransfer(CommandSender requester, ProtectedRegion region, Player transferTo) {
         PlayerGuard inst = PlayerGuard.getInstance();
-
-        if (inst.getProtectionUsed(transferTo) + region.volume() > inst.getProtectLimit(transferTo)) {
-            requester.sendMessage(PGMessages.error("%s にはこの領域を譲渡できません。保護上限を超えます。", PGMessages.highlight(transferTo.getName())));
+        if (!withinUnpaidLimit(inst, transferTo, region.volume())) {
+            requester.sendMessage(PGMessages.error(
+                    "譲渡先の保護上限を超えています。使用量: %s / 追加分: %s / 上限: %s",
+                    PGMessages.highlight(inst.getProtectionUsed(transferTo)),
+                    PGMessages.highlight(region.volume()),
+                    PGMessages.highlight(inst.getProtectLimit(transferTo))
+            ));
             return false;
         }
 
         ConfirmCommand.addConfirm(transferTo.getUniqueId(), () -> {
-            if (inst.getProtectionUsed(transferTo) + region.volume() > inst.getProtectLimit(transferTo)) {
-                requester.sendMessage(PGMessages.error("譲渡受理時点で保護上限を超えるため、移管できませんでした。"));
+            if (!withinUnpaidLimit(inst, transferTo, region.volume())) {
+                transferTo.sendMessage(PGMessages.error("保護上限を超えているため、譲渡を受け取れません。"));
+                requester.sendMessage(PGMessages.error("%s の保護上限を超えているため、譲渡は完了しませんでした。", PGMessages.highlight(transferTo.getName())));
                 return;
             }
             region.getOwners().clear();
@@ -106,7 +113,7 @@ public class TransferCommand extends SubCommand {
                 "%s から領域 %s の譲渡リクエストが届いています。受け取るなら %s を実行してください。",
                 PGMessages.highlight(requester.getName()),
                 PGMessages.highlight(region.getId()),
-                PGMessages.highlight("/pg confirm")
+                PGMessages.highlight("/pg yes")
         ));
         requester.sendMessage(PGMessages.success(
                 "領域 %s を %s に譲渡申請しました。",
@@ -151,5 +158,10 @@ public class TransferCommand extends SubCommand {
     private static boolean canTransfer(ProtectedRegion region, UUID uuid) {
         if (RegionRoles.isPrimaryOwner(region, uuid)) return true;
         return RegionRoles.roleOf(region, uuid) == RegionRoles.Role.SUB_OWNER && PGConfig.allowSubownerTransfer();
+    }
+
+    private static boolean withinUnpaidLimit(PlayerGuard inst, Player transferTo, long addedVolume) {
+        if (inst.getPaidExtensionConfig().enabled()) return true;
+        return inst.getProtectionUsed(transferTo) + addedVolume <= inst.getProtectLimit(transferTo);
     }
 }

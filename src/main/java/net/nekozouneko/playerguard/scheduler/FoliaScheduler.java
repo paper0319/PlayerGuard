@@ -64,6 +64,11 @@ final class FoliaScheduler implements PGScheduler {
     }
 
     @Override
+    public boolean isOwnedByCurrentRegion(Entity entity) {
+        return Bukkit.isOwnedByCurrentRegion(entity);
+    }
+
+    @Override
     public void cancelAll() {
         synchronized (tasks) {
             for (ScheduledTask t : tasks) {

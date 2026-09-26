@@ -7,7 +7,7 @@ import java.util.Set;
 import java.util.UUID;
 
 /**
- * 領域ロール(主オーナー/subowner/builder)のコアロジック。
+ * 領域ロール(主オーナー/サブオーナー/builder)のコアロジック。
  * 主オーナーはカスタムフラグ pg-primary-owner で識別する。
  * Bukkit に依存せず単体テスト可能。
  */
@@ -53,7 +53,7 @@ public final class RegionRoles {
         return Role.NONE;
     }
 
-    /** 譲渡・領域削除・subowner任免が可能か(=主オーナーか)。レガシー(複数owner・未設定)は全owners可。 */
+    /** 譲渡・領域削除・サブオーナー任免が可能か(=主オーナーか)。レガシー(複数owner・未設定)は全owners可。 */
     public static boolean isPrimaryOwner(ProtectedRegion region, UUID uuid) {
         return roleOf(region, uuid) == Role.PRIMARY_OWNER;
     }
@@ -64,7 +64,7 @@ public final class RegionRoles {
         region.setFlag(PGCustomFlags.PRIMARY_OWNER, uuid.toString());
     }
 
-    /** builder を subowner へ昇格(members→owners)。貸出中builderは昇格不可。 */
+    /** builder を サブオーナー へ昇格(members→owners)。貸出中builderは昇格不可。 */
     public static PromoteResult promote(ProtectedRegion region, UUID target) {
         if (region == null || target == null) return PromoteResult.INVALID;
         if (!region.getMembers().contains(target)) return PromoteResult.NOT_BUILDER;
@@ -76,7 +76,7 @@ public final class RegionRoles {
         return PromoteResult.PROMOTED;
     }
 
-    /** subowner を builder へ降格(owners→members)。主オーナーは降格不可。 */
+    /** サブオーナー を builder へ降格(owners→members)。主オーナーは降格不可。 */
     public static DemoteResult demote(ProtectedRegion region, UUID target) {
         if (region == null || target == null) return DemoteResult.INVALID;
         if (roleOf(region, target) != Role.SUB_OWNER) return DemoteResult.NOT_CO_OWNER;
@@ -85,7 +85,7 @@ public final class RegionRoles {
         return DemoteResult.DEMOTED;
     }
 
-    /** subowner/builder を領域から外す。主オーナー・非メンバーには使えない。 */
+    /** サブオーナー/builder を領域から外す。主オーナー・非メンバーには使えない。 */
     public static RemoveRoleResult removeMember(ProtectedRegion region, UUID target) {
         if (region == null || target == null) return RemoveRoleResult.INVALID;
         switch (roleOf(region, target)) {

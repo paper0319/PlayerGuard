@@ -3,6 +3,7 @@ package net.nekozouneko.playerguard.gui;
 import com.sk89q.worldguard.protection.regions.ProtectedRegion;
 import net.nekozouneko.commons.spigot.inventory.ItemStackBuilder;
 import net.nekozouneko.playerguard.PGMessages;
+import net.nekozouneko.playerguard.region.ProtectionAccess;
 import net.nekozouneko.playerguard.region.RegionRentals;
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
@@ -43,9 +44,9 @@ public class RentalDurationGUI extends AbstractGUI {
     private static final int ROW_MINUS = 18;
 
     // ナビゲーション（Row 3）
-    private static final int SLOT_BACK    = 27;
+    private static final int SLOT_BACK    = 35;
     private static final int SLOT_RESET   = 31;
-    private static final int SLOT_CONFIRM = 35;
+    private static final int SLOT_CONFIRM = 34;
 
     private static final Material GLASS = Material.BLACK_STAINED_GLASS_PANE;
 
@@ -148,6 +149,11 @@ public class RentalDurationGUI extends AbstractGUI {
     }
 
     private void rent(long duration, String label) {
+        if (!ProtectionAccess.canManageMembers(getPlayer(), region)) {
+            getPlayer().sendMessage(PGMessages.error("建築権を貸し出す権限がありません。"));
+            back();
+            return;
+        }
         RegionRentals.RentResult result =
                 RegionRentals.rent(region, target, duration, System.currentTimeMillis());
         switch (result) {

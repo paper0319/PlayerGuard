@@ -28,4 +28,18 @@ public final class ProgressivePricingService {
         }
         return total.setScale(2, RoundingMode.HALF_UP);
     }
+
+    public BigDecimal currentRate(long currentVolume, long freeLimit) {
+        if (currentVolume <= freeLimit || rates.isEmpty()) return BigDecimal.ZERO;
+        Map.Entry<Long, BigDecimal> entry = rates.floorEntry(currentVolume);
+        if (entry != null) return entry.getValue();
+        return rates.firstEntry().getValue();
+    }
+
+    public long nextBandStart(long currentVolume, long freeLimit) {
+        if (rates.isEmpty()) return -1L;
+        if (currentVolume < freeLimit) return freeLimit;
+        Long next = rates.higherKey(currentVolume);
+        return next == null ? -1L : next;
+    }
 }

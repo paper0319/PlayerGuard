@@ -25,6 +25,9 @@ public interface PGScheduler {
     /** 指定座標が現在のリージョンスレッドに所有されているか。Bukkit では常に true。 */
     boolean isOwnedByCurrentRegion(Location location);
 
+    /** 指定エンティティが現在のリージョンスレッドに所有されているか。Bukkit では常に true。 */
+    boolean isOwnedByCurrentRegion(Entity entity);
+
     /** このスケジューラが起動した全タスクをキャンセルする。 */
     void cancelAll();
 

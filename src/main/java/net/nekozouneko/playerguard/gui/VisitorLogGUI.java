@@ -24,10 +24,9 @@ public class VisitorLogGUI extends AbstractGUI {
     private static final int SIZE      = 54;
     private static final int PAGE_SIZE = 45;
 
-    // Nav bar: [BACK(45)][G][PREV(47)][G][CLOSE(49)][G][NEXT(51)][G][G]
+    // Nav bar: [BACK(45)][G][PREV(47)][G][CLOLE(49)][G][NEXT(51)][G][G]
     private static final int SLOT_BACK  = 45;
     private static final int SLOT_PREV  = 47;
-    private static final int SLOT_CLOSE = 49;
     private static final int SLOT_NEXT  = 51;
 
     private static final SimpleDateFormat DATE_FORMAT =
@@ -87,11 +86,6 @@ public class VisitorLogGUI extends AbstractGUI {
                     .build());
         }
 
-        inventory.setItem(SLOT_CLOSE, ItemStackBuilder.of(Material.BARRIER)
-                .name(ChatColor.RED + "" + ChatColor.BOLD + "閉じる")
-                .lore(ChatColor.DARK_GRAY + "インベントリを閉じる")
-                .build());
-
         if (page < maxPage) {
             inventory.setItem(SLOT_NEXT, ItemStackBuilder.of(Material.ARROW)
                     .name(ChatColor.WHITE + "次のページ →")
@@ -137,7 +131,6 @@ public class VisitorLogGUI extends AbstractGUI {
 
         int slot = e.getRawSlot();
         if (slot == SLOT_BACK)  { back(); return; }
-        if (slot == SLOT_CLOSE) { getPlayer().closeInventory(); return; }
         if (slot == SLOT_PREV)  { page--; init(); return; }
         if (slot == SLOT_NEXT)  { page++; init(); return; }
     }

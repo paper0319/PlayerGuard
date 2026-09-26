@@ -11,6 +11,9 @@ import net.nekozouneko.commons.spigot.command.TabCompletes;
 import net.nekozouneko.playerguard.PlayerGuard;
 import net.nekozouneko.playerguard.command.sub.SubCommand;
 import net.nekozouneko.playerguard.command.sub.playerguard.ConfirmCommand;
+import net.nekozouneko.playerguard.command.PendingDeletion;
+import net.nekozouneko.playerguard.PGUtil;
+import net.nekozouneko.playerguard.region.RegionRoles;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
@@ -35,11 +38,8 @@ public class DeleteCommand extends SubCommand {
 
         Player p = (Player) sender;
         String id = args.get(0);
-
-        RegionManager rm = WorldGuard.getInstance().getPlatform().getRegionContainer()
-                .get(BukkitAdapter.adapt(p.getWorld()));
-
-        ProtectedRegion region = rm.getRegion(id);
+        java.util.Map.Entry<ProtectedRegion, org.bukkit.World> found = PGUtil.findPlayerGuardRegions(id);
+        ProtectedRegion region = found == null ? null : found.getKey();
         if (region == null
                 || region instanceof GlobalProtectedRegion
                 || !StateFlag.test(region.getFlag(PlayerGuard.getGuardRegisteredFlag()))) {
@@ -50,14 +50,13 @@ public class DeleteCommand extends SubCommand {
         }
 
         final String targetId = region.getId();
-        ConfirmCommand.addConfirm(p.getUniqueId(), () ->
-            PlayerGuard.getInstance().getScheduler().runGlobal(() -> {
-                rm.removeRegion(targetId);
-                sender.sendMessage(String.format(
-                        ChatColor.DARK_GREEN + "■ " + ChatColor.GREEN + "保護領域「%s」を削除しました。", targetId
-                ));
-            })
-        );
+        java.util.UUID owner = RegionRoles.getPrimaryOwner(region);
+        if (owner == null) {
+            sender.sendMessage(ChatColor.RED + "保護のオーナー情報が見つかりません。");
+            return true;
+        }
+        ConfirmCommand.addDeletionConfirm(new PendingDeletion(targetId, owner, p.getUniqueId(), true,
+                System.currentTimeMillis() + 60_000L));
 
         sender.sendMessage(String.format(
                 ChatColor.GOLD + "■ " + ChatColor.YELLOW + "保護領域「%s」を削除するには/playerguard confirmを実行してください。", targetId

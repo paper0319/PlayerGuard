@@ -10,13 +10,16 @@ import com.sk89q.worldguard.protection.regions.ProtectedCuboidRegion;
 import com.sk89q.worldguard.protection.regions.ProtectedRegion;
 import com.sk89q.worldguard.protection.regions.RegionContainer;
 import com.sk89q.worldguard.protection.util.WorldEditRegionConverter;
+import net.nekozouneko.playerguard.region.RegionRoles;
 import org.bukkit.Bukkit;
 import org.bukkit.World;
 import org.bukkit.entity.Player;
 
 import java.util.AbstractMap;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.UUID;
 import java.util.stream.IntStream;
 
 public final class PGUtil {
@@ -36,6 +39,10 @@ public final class PGUtil {
     }
 
     public static Map<ProtectedRegion, World> getPlayerRegions(Player player) {
+        return getPlayerRegions(player.getUniqueId());
+    }
+
+    public static Map<ProtectedRegion, World> getPlayerRegions(java.util.UUID playerId) {
         Map<ProtectedRegion, World> result = new HashMap<>();
 
         RegionContainer rc = WorldGuard.getInstance().getPlatform().getRegionContainer();
@@ -45,11 +52,21 @@ public final class PGUtil {
             rm.getRegions().values().stream()
                     .filter(region -> !(region instanceof GlobalProtectedRegion))
                     .filter(region -> StateFlag.test(region.getFlag(PlayerGuard.getGuardRegisteredFlag())))
-                    .filter(region -> region.getOwners().contains(player.getUniqueId()))
+                    .filter(region -> region.getOwners().contains(playerId) || region.getMembers().contains(playerId))
                     .forEach(region -> result.put(region, world));
         });
 
         return result;
+    }
+
+    /** Volume of protections the player formally owns. Member/sub-owner land does not count. */
+    public static long primaryOwnedVolume(Collection<ProtectedRegion> regions, UUID playerId) {
+        long used = 0;
+        if (regions == null || playerId == null) return 0;
+        for (ProtectedRegion region : regions) {
+            if (region != null && RegionRoles.isPrimaryOwner(region, playerId)) used += region.volume();
+        }
+        return used;
     }
 
     public static Map.Entry<ProtectedRegion, World> findPlayerGuardRegions(String id) {

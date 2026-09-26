@@ -14,8 +14,15 @@ public final class PGCustomFlags {
     public static StringFlag PRIMARY_OWNER = new StringFlag("pg-primary-owner");
     /** Payment history serialized with the protected region. */
     public static StringFlag PAYMENT_RECORD = new StringFlag("pg-payment-record");
+    /** Player-facing display name for the protected region. */
+    public static StringFlag DISPLAY_NAME = new StringFlag("pg-display-name");
+    public static StringFlag CUSTOM_CATEGORY = new StringFlag("pg-category");
+    public static StringFlag CUSTOM_COLOR = new StringFlag("pg-color");
+    public static StringFlag PROTECTION_LOGS = new StringFlag("pg-logs");
     /** 貸出エントリ "&lt;uuid&gt;:&lt;期限epochミリ秒&gt;" の集合。 */
     public static SetFlag<String> RENTALS = new SetFlag<>("pg-rentals", new StringFlag(null));
+    /** 侵入・操作を禁じるプレイヤーのUUID文字列の集合。 */
+    public static SetFlag<String> BLACKLIST = new SetFlag<>("pg-blacklist", new StringFlag(null));
 
     private PGCustomFlags() {}
 }

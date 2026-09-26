@@ -49,11 +49,50 @@ class ProgressivePricingServiceTest {
         assertEquals(new BigDecimal("5000.00"), pricing.calculate(90000, 150000, 100000));
     }
 
+    @Test
+    void calculatesRequestedProgressiveExample() {
+        ProgressivePricingService service = new ProgressivePricingService(defaultRates());
+
+        assertEquals(new BigDecimal("3600.00"), service.calculate(120000, 250000, 120000));
+    }
+
+    @Test
+    void chargesOnlyVolumeAboveFreeLimit() {
+        ProgressivePricingService service = new ProgressivePricingService(defaultRates());
+
+        assertEquals(new BigDecimal("600.00"), service.calculate(80000, 150000, 120000));
+    }
+
+    @Test
+    void reportsCurrentRateAndNextBandForGui() {
+        ProgressivePricingService service = new ProgressivePricingService(defaultRates());
+
+        assertEquals(new BigDecimal("0.02"), service.currentRate(150000, 120000));
+        assertEquals(200000L, service.nextBandStart(150000, 120000));
+    }
+
+    @Test
+    void reportsNoCurrentRateInsideFreeLimit() {
+        ProgressivePricingService service = new ProgressivePricingService(defaultRates());
+
+        assertEquals(BigDecimal.ZERO, service.currentRate(80000, 120000));
+        assertEquals(120000L, service.nextBandStart(80000, 120000));
+    }
+
     private static NavigableMap<Long, BigDecimal> rates() {
         NavigableMap<Long, BigDecimal> rates = new TreeMap<>();
         rates.put(100000L, new BigDecimal("0.1"));
         rates.put(150000L, new BigDecimal("0.2"));
         rates.put(200000L, new BigDecimal("0.5"));
+        return rates;
+    }
+
+    private static NavigableMap<Long, BigDecimal> defaultRates() {
+        NavigableMap<Long, BigDecimal> rates = new TreeMap<>();
+        rates.put(120000L, new BigDecimal("0.02"));
+        rates.put(200000L, new BigDecimal("0.04"));
+        rates.put(300000L, new BigDecimal("0.08"));
+        rates.put(500000L, new BigDecimal("0.15"));
         return rates;
     }
 }

@@ -12,37 +12,47 @@ website: "https://github.com/TeamNekozouneko/PlayerGuard"
 commands:
   cancel-claim:
     aliases: [cancel]
-    description: "cancel selection"
-    usage: "/<command>"
+    description: "確認中の土地保護をキャンセルします"
+    usage: "/cancel"
     permission: playerguard.command.cancel
   claim:
     aliases: [hogo]
-    description: "Claims selected region"
-    usage: "/<command>"
+    description: "確認中の土地保護を作成します"
+    usage: "/claim"
     permission: playerguard.command.claim
   disclaim:
     aliases: [remove-hogo, hogo-remove]
-    description: "Claims selected region"
+    description: "土地保護を削除します"
     usage: "/<command>"
     permission: playerguard.command.disclaim
   flags:
-    description: "Manages flag of the region"
+    description: "土地保護のフラグを管理します"
     usage: "/<command>"
     permission: playerguard.command.flags
-
   playerguard:
     aliases: [pg, guard]
-    description: "PlayerGuard command"
+    description: "PlayerGuardコマンド"
     usage: "/<command> (add|info|remove|transfer) [<args>]"
     permission: playerguard.command.playerguard
-
   playerguard-admin:
     aliases: [pguard-admin, pg-admin]
-    description: "Admin command"
+    description: "PlayerGuard管理コマンド"
     usage: "/<command> (delete <id>|expand <player> <n>|lookup [<id>]|reload)"
     permission: playerguard.command.admin
 
 permissions:
+  playerguard.claim:
+    default: true
+    children:
+      - playerguard.command.claim
+  playerguard.cancel:
+    default: true
+    children:
+      - playerguard.command.cancel
+  playerguard.teleport.use:
+    default: true
+  playerguard.teleport.manage:
+    default: true
   playerguard.command.cancel:
     default: true
   playerguard.command.claim:
@@ -53,11 +63,28 @@ permissions:
     default: true
   playerguard.command.playerguard:
     default: true
-
   playerguard.command.admin:
     children:
       - playerguard.command.admin.delete
       - playerguard.command.admin.expand
       - playerguard.command.admin.lookup
       - playerguard.command.admin.reload
+      - playerguard.admin.delete
+      - playerguard.admin.confirm
     default: op
+  playerguard.admin.view:
+    default: op
+  playerguard.admin.manage:
+    default: op
+  playerguard.admin.free-protection:
+    default: op
+  playerguard.admin.teleport.manage:
+    default: op
+  playerguard.admin.teleport:
+    default: op
+  playerguard.admin.confirm:
+    default: op
+  playerguard.admin.delete:
+    default: op
+    children:
+      - playerguard.command.admin.delete

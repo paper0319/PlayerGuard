@@ -3,7 +3,10 @@ package net.nekozouneko.playerguard.gui;
 import com.sk89q.worldguard.protection.regions.ProtectedRegion;
 import net.nekozouneko.commons.spigot.inventory.ItemStackBuilder;
 import net.nekozouneko.playerguard.PGMessages;
+import net.nekozouneko.playerguard.PlayerGuard;
 import net.nekozouneko.playerguard.region.RegionRentals;
+import net.nekozouneko.playerguard.notification.ProtectionRoleNotifier;
+import net.nekozouneko.playerguard.region.ProtectionAccess;
 import net.nekozouneko.playerguard.region.RegionRoles;
 import net.nekozouneko.playerguard.region.RegionRoles.Role;
 import org.bukkit.Bukkit;
@@ -23,7 +26,7 @@ public class MemberActionGUI extends AbstractGUI {
 
     // Layout: [BACK][HEAD][GLASS][PROMOTE][DEMOTE][CANCEL_RENTAL][GLASS][REMOVE][GLASS]
     //            0     1     2       3        4          5            6      7       8
-    private static final int SLOT_BACK          = 0;
+    private static final int SLOT_BACK          = 8;
     private static final int SLOT_HEAD          = 1;
     private static final int SLOT_PROMOTE       = 3;
     private static final int SLOT_DEMOTE        = 4;
@@ -46,24 +49,13 @@ public class MemberActionGUI extends AbstractGUI {
         return name != null ? name : target.toString();
     }
 
-    private boolean canPromote(Role viewer, Role targetRole, boolean rental) {
-        return viewer == Role.PRIMARY_OWNER && targetRole == Role.BUILDER && !rental;
-    }
+    private boolean canPromote(Role viewer, Role targetRole, boolean rental) { return ProtectionAccess.canManageSubOwners(getPlayer(), region) && targetRole == Role.BUILDER && !rental; }
 
-    private boolean canDemote(Role viewer, Role targetRole) {
-        return viewer == Role.PRIMARY_OWNER && targetRole == Role.SUB_OWNER;
-    }
+    private boolean canDemote(Role viewer, Role targetRole) { return ProtectionAccess.canManageSubOwners(getPlayer(), region) && targetRole == Role.SUB_OWNER; }
 
-    private boolean canCancelRental(Role viewer, boolean rental) {
-        return rental && (viewer == Role.PRIMARY_OWNER || viewer == Role.SUB_OWNER);
-    }
+    private boolean canCancelRental(Role viewer, boolean rental) { return rental && (ProtectionAccess.isAdmin(getPlayer()) || viewer == Role.PRIMARY_OWNER || viewer == Role.SUB_OWNER); }
 
-    private boolean canRemove(Role viewer, Role targetRole, boolean rental) {
-        if (rental) return false;
-        if (viewer == Role.PRIMARY_OWNER)
-            return targetRole == Role.SUB_OWNER || targetRole == Role.BUILDER;
-        return viewer == Role.SUB_OWNER && targetRole == Role.BUILDER;
-    }
+    private boolean canRemove(Role viewer, Role targetRole, boolean rental) { if (rental) return false; if (ProtectionAccess.isAdmin(getPlayer())) return targetRole == Role.SUB_OWNER || targetRole == Role.BUILDER; if (viewer == Role.PRIMARY_OWNER) return targetRole == Role.SUB_OWNER || targetRole == Role.BUILDER; return viewer == Role.SUB_OWNER && targetRole == Role.BUILDER; }
 
     @Override
     public void init() {
@@ -105,27 +97,27 @@ public class MemberActionGUI extends AbstractGUI {
         }
         inventory.setItem(SLOT_HEAD, head);
 
-        // Promote: 建築士 → サブオーナー
+        // Promote: メンバー → サブオーナー
         if (canPromote(viewer, targetRole, rental)) {
             inventory.setItem(SLOT_PROMOTE, ItemStackBuilder.of(Material.EMERALD)
                     .name(ChatColor.GREEN + "" + ChatColor.BOLD + "サブオーナーに昇格")
                     .lore(
                         ChatColor.DARK_GRAY + "─────────────────",
-                        ChatColor.GRAY + "建築士 → " + ChatColor.GOLD + "サブオーナー",
+                        ChatColor.GRAY + "メンバー → " + ChatColor.GOLD + "サブオーナー",
                         ChatColor.DARK_GRAY + "サブオーナー: " + ChatColor.GRAY + "メンバーの管理ができます",
                         ChatColor.DARK_GRAY + "─────────────────",
                         ChatColor.DARK_GRAY + "クリックで昇格"
                     ).build());
         }
 
-        // Demote: サブオーナー → 建築士
+        // Demote: サブオーナー → メンバー
         if (canDemote(viewer, targetRole)) {
             inventory.setItem(SLOT_DEMOTE, ItemStackBuilder.of(Material.GUNPOWDER)
-                    .name(ChatColor.YELLOW + "" + ChatColor.BOLD + "建築士に降格")
+                    .name(ChatColor.YELLOW + "" + ChatColor.BOLD + "メンバーに降格")
                     .lore(
                         ChatColor.DARK_GRAY + "─────────────────",
-                        ChatColor.GRAY + "サブオーナー → " + ChatColor.WHITE + "建築士",
-                        ChatColor.DARK_GRAY + "建築士: " + ChatColor.GRAY + "建築だけができます",
+                        ChatColor.GRAY + "サブオーナー → " + ChatColor.WHITE + "メンバー",
+                        ChatColor.DARK_GRAY + "メンバー: " + ChatColor.GRAY + "建築だけができます",
                         ChatColor.DARK_GRAY + "─────────────────",
                         ChatColor.DARK_GRAY + "クリックで降格"
                     ).build());
@@ -161,11 +153,11 @@ public class MemberActionGUI extends AbstractGUI {
 
     /** 表示用の役割名（子供でもわかる名前） */
     private String roleDisplayName(Role role, boolean rental) {
-        if (rental) return ChatColor.YELLOW + "建築士（貸出中）";
+        if (rental) return ChatColor.YELLOW + "メンバー（貸出中）";
         switch (role) {
             case PRIMARY_OWNER: return ChatColor.GOLD + "オーナー";
             case SUB_OWNER:     return ChatColor.GOLD + "サブオーナー";
-            case BUILDER:       return ChatColor.WHITE + "建築士";
+            case BUILDER:       return ChatColor.WHITE + "メンバー";
             default:            return ChatColor.GRAY + "非メンバー";
         }
     }
@@ -176,57 +168,73 @@ public class MemberActionGUI extends AbstractGUI {
         switch (role) {
             case PRIMARY_OWNER: return ChatColor.GRAY + "領域のすべてを管理できます";
             case SUB_OWNER:     return ChatColor.GRAY + "メンバーの管理ができます";
-            case BUILDER:       return ChatColor.GRAY + "領域の中で建築できます";
+            case BUILDER:       return ChatColor.GRAY + "土地の利用を許可されたメンバーです";
             default:            return "";
         }
     }
 
     @EventHandler
-    public void onClick(InventoryClickEvent e) {
-        if (e.getInventory().getHolder() != this) return;
-        e.setCancelled(true);
+    public void onClick(InventoryClickEvent event) {
+        if (event.getView().getTopInventory().getHolder() != this) return;
+        event.setCancelled(true);
 
-        Role viewer    = RegionRoles.roleOf(region, getPlayer().getUniqueId());
+        Role viewer = RegionRoles.roleOf(region, getPlayer().getUniqueId());
         Role targetRole = RegionRoles.roleOf(region, target);
-        boolean rental  = RegionRentals.isRental(region, target);
+        boolean rental = RegionRentals.isRental(region, target);
 
-        switch (e.getRawSlot()) {
-            case SLOT_BACK:
-                back();
-                break;
-            case SLOT_PROMOTE:
+        switch (event.getRawSlot()) {
+            case SLOT_BACK -> back();
+            case SLOT_PROMOTE -> {
                 if (canPromote(viewer, targetRole, rental)
                         && RegionRoles.promote(region, target) == RegionRoles.PromoteResult.PROMOTED) {
-                    getPlayer().sendMessage(PGMessages.success("%s を サブオーナー に昇格しました。", PGMessages.highlight(targetName())));
+                    notifyRoleChange(true, true);
+                    PlayerGuard.getInstance().getProtectionLogService().log(region, "サブオーナー追加", getPlayer().getUniqueId(), target.toString(), "メンバー", "サブオーナー", "admin=" + ProtectionAccess.isAdmin(getPlayer()) + ";actor=" + getPlayer().getName());
                     clickFeedbackAndBack();
                 } else init();
-                break;
-            case SLOT_DEMOTE:
+            }
+            case SLOT_DEMOTE -> {
                 if (canDemote(viewer, targetRole)
                         && RegionRoles.demote(region, target) == RegionRoles.DemoteResult.DEMOTED) {
-                    getPlayer().sendMessage(PGMessages.success("%s を 建築士 に降格しました。", PGMessages.highlight(targetName())));
+                    notifyRoleChange(true, false);
+                    PlayerGuard.getInstance().getProtectionLogService().log(region, "サブオーナー削除", getPlayer().getUniqueId(), target.toString(), "サブオーナー", "メンバー", "admin=" + ProtectionAccess.isAdmin(getPlayer()) + ";actor=" + getPlayer().getName());
                     clickFeedbackAndBack();
                 } else init();
-                break;
-            case SLOT_CANCEL_RENTAL:
+            }
+            case SLOT_CANCEL_RENTAL -> {
                 if (canCancelRental(viewer, rental)
                         && RegionRoles.removeMember(region, target) == RegionRoles.RemoveRoleResult.REMOVED) {
-                    getPlayer().sendMessage(PGMessages.success("%s への貸出を解約しました。", PGMessages.highlight(targetName())));
+                    getPlayer().sendMessage(PGMessages.success("%s への貸出を解除しました。", PGMessages.highlight(targetName())));
                     clickFeedbackAndBack();
                 } else init();
-                break;
-            case SLOT_REMOVE:
+            }
+            case SLOT_REMOVE -> {
                 if (canRemove(viewer, targetRole, rental)
                         && RegionRoles.removeMember(region, target) == RegionRoles.RemoveRoleResult.REMOVED) {
-                    getPlayer().sendMessage(PGMessages.success("%s をメンバーから削除しました。", PGMessages.highlight(targetName())));
+                    boolean subOwner = targetRole == Role.SUB_OWNER;
+                    notifyRoleChange(subOwner, false);
+                    PlayerGuard.getInstance().getProtectionLogService().log(region, subOwner ? "サブオーナー削除" : "メンバー削除", getPlayer().getUniqueId(), target.toString(), subOwner ? "サブオーナー" : "メンバー", null, "admin=" + ProtectionAccess.isAdmin(getPlayer()) + ";actor=" + getPlayer().getName());
                     clickFeedbackAndBack();
                 } else init();
-                break;
-            default:
-                break;
+            }
+            default -> { }
         }
     }
 
+    private void notifyRoleChange(boolean subOwner, boolean added) {
+        String targetName = targetName();
+        String protectionName = PlayerGuard.getInstance().getProtectionNameRepository().displayName(region);
+        String role = subOwner ? "サブオーナー" : "メンバー";
+        String actorName = getPlayer().getName();
+        getPlayer().sendMessage((added ? ChatColor.GREEN : ChatColor.YELLOW) + targetName + " を" + role + (added ? "に追加しました。" : "から削除しました。"));
+        getPlayer().sendMessage(ChatColor.GRAY + "保護名: " + ChatColor.WHITE + protectionName);
+        ProtectionRoleNotifier notifier = new ProtectionRoleNotifier(PlayerGuard.getInstance());
+        String targetMessage = subOwner
+                ? (added ? notifier.subOwnerAddedTarget(actorName, protectionName) : notifier.subOwnerRemovedTarget(actorName, protectionName))
+                : (added ? notifier.memberAddedTarget(actorName, protectionName) : notifier.memberRemovedTarget(actorName, protectionName));
+        boolean targetOnline = notifier.notifyTargetAndPrimaryOwner(region, getPlayer().getUniqueId(), target, targetMessage,
+                notifier.primaryOwnerMessage(actorName, targetName, protectionName, role, added));
+        if (!targetOnline) getPlayer().sendMessage(ChatColor.GRAY + "対象プレイヤーはオフラインのため、現在は本人へ通知されません。");
+    }
     private void clickFeedbackAndBack() {
         getPlayer().playSound(getPlayer().getLocation(), Sound.UI_BUTTON_CLICK, 10, 1);
         back();

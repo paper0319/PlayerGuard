@@ -1,10 +1,5 @@
 package net.nekozouneko.playerguard.paid;
-
-import java.math.BigDecimal;
-import java.time.Instant;
-import java.util.UUID;
-
-public record ProtectionPaymentRecord(UUID owner, String protectionId, long volume, long paidVolume,
-                                      BigDecimal amountPaid, Instant createdAt, boolean refunded) {
-    public ProtectionPaymentRecord refund() { return new ProtectionPaymentRecord(owner, protectionId, volume, paidVolume, amountPaid, createdAt, true); }
-}
+import java.math.BigDecimal; import java.time.Instant; import java.util.UUID;
+/** Payment data is immutable; refunds always use amountPaid, never a later price. */
+public record ProtectionPaymentRecord(UUID owner,String protectionId,long volume,long paidVolume,BigDecimal amountPaid,BigDecimal normalCalculatedCost,Instant createdAt,boolean refunded,UUID payer){
+ public ProtectionPaymentRecord(UUID owner,String protectionId,long volume,long paidVolume,BigDecimal amountPaid,Instant createdAt,boolean refunded){this(owner,protectionId,volume,paidVolume,amountPaid,amountPaid,createdAt,refunded,owner);} public ProtectionPaymentRecord(UUID owner,String protectionId,long volume,long paidVolume,BigDecimal amountPaid,Instant createdAt,boolean refunded,UUID payer){this(owner,protectionId,volume,paidVolume,amountPaid,amountPaid,createdAt,refunded,payer);} public ProtectionPaymentRecord(UUID owner,String protectionId,long volume,long paidVolume,BigDecimal amountPaid,BigDecimal normalCalculatedCost,Instant createdAt,boolean refunded){this(owner,protectionId,volume,paidVolume,amountPaid,normalCalculatedCost,createdAt,refunded,owner);} public ProtectionPaymentRecord refund(){return new ProtectionPaymentRecord(owner,protectionId,volume,paidVolume,amountPaid,normalCalculatedCost,createdAt,true,payer);}}

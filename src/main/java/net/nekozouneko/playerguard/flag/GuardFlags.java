@@ -21,10 +21,10 @@ public enum GuardFlags {
     INTERACT("interact", "アイテムの使用、チェストを開く", Material.REDSTONE, 1, true, true, Flags.USE, Flags.INTERACT, Flags.CHEST_ACCESS, Flags.USE_ANVIL),
     PVP("pvp", "PvP (プレイヤー同士のダメージ)", Material.IRON_SWORD, 1, false, false, Flags.PVP),
     ENTITY_DAMAGE("entity-damage", "エンティティへのダメージ", Material.TRIDENT, 1, true, true, Flags.DAMAGE_ANIMALS),
-    ENTRY("entry", "メンバー以外の侵入", Material.BARRIER, 1, null, true, Flags.ENTRY, Flags.CHORUS_TELEPORT),
+    ENTRY("entry", "メンバー以外の侵入", Material.BARRIER, 1, null, true, Flags.ENTRY, Flags.ENDERPEARL, Flags.CHORUS_TELEPORT),
     PISTONS("pistons", "ピストンの使用", Material.PISTON, 1, true, true, Flags.PISTONS, Flags.USE_DRIPLEAF),
     // --- 2行目: ワールド/環境系フラグ ---
-    EXPLOSION("explosion", "爆発によるダメージ", Material.TNT, 2, true, false, Flags.CREEPER_EXPLOSION, Flags.TNT, Flags.OTHER_EXPLOSION),
+    EXPLOSION("explosion", "爆発によるダメージ", Material.TNT, 2, false, false, Flags.CREEPER_EXPLOSION, Flags.TNT, Flags.OTHER_EXPLOSION),
     FIRE("fire", "火の延焼", Material.FLINT_AND_STEEL, 2, true, false, Flags.FIRE_SPREAD, Flags.LAVA_FIRE),
     MOB_SPAWNING("mob-spawning", "モブのスポーン", Material.ZOMBIE_HEAD, 2, true, false, Flags.MOB_SPAWNING),
     ITEM("item", "アイテムのドロップ・拾う", Material.HOPPER, 2, true, true, Flags.ITEM_DROP, Flags.ITEM_PICKUP),

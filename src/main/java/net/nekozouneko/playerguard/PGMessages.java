@@ -37,6 +37,14 @@ public final class PGMessages {
         return ChatColor.AQUA + String.valueOf(value) + ChatColor.WHITE;
     }
 
+    public static String deniedEntryTitle() {
+        return ChatColor.RED + "" + ChatColor.BOLD + "その土地には入れません";
+    }
+
+    public static String deniedEntrySubtitle() {
+        return ChatColor.GRAY + "メンバー以外は入場できません";
+    }
+
     private static String compose(ChatColor accent, String label, String format, Object... args) {
         return PREFIX + accent + "[" + label + "] " + ChatColor.WHITE + String.format(format, args);
     }

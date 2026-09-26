@@ -1,25 +1,34 @@
-package net.nekozouneko.playerguard.command;import com.sk89q.worldedit.bukkit.BukkitAdapter;import com.sk89q.worldedit.regions.CuboidRegion;import com.sk89q.worldguard.WorldGuard;import com.sk89q.worldguard.bukkit.WorldGuardPlugin;import com.sk89q.worldguard.protection.ApplicableRegionSet;import com.sk89q.worldguard.protection.flags.StateFlag;import com.sk89q.worldguard.protection.managers.RegionManager;import com.sk89q.worldguard.protection.regions.GlobalProtectedRegion;import com.sk89q.worldguard.protection.regions.ProtectedCuboidRegion;import com.sk89q.worldguard.protection.regions.ProtectedRegion;import com.sk89q.worldguard.protection.regions.RegionContainer;import net.nekozouneko.playerguard.PGConfig;import net.nekozouneko.playerguard.PGMessages;import net.nekozouneko.playerguard.PGUtil;import net.nekozouneko.playerguard.PlayerGuard;import net.nekozouneko.playerguard.flag.GuardFlags;import net.nekozouneko.playerguard.flag.GuardRegisteredFlag;import net.nekozouneko.playerguard.region.RegionRoles;import net.nekozouneko.playerguard.selection.SelectionStorage;import org.bukkit.Bukkit;import org.bukkit.command.Command;import org.bukkit.command.CommandExecutor;import org.bukkit.command.CommandSender;import org.bukkit.command.TabCompleter;import org.bukkit.entity.Player;import java.util.*;
-import java.math.BigDecimal;
-import java.time.Instant;
-import net.nekozouneko.playerguard.paid.ProtectionPaymentRecord;public class ClaimCommand implements CommandExecutor, TabCompleter {    @Override    public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {        if (!(sender instanceof Player)) {            sender.sendMessage(PGMessages.error("このコマンドはプレイヤーのみ実行できます。"));            return true;        }        SelectionStorage ss = PlayerGuard.getInstance().getSelectionStorage();        Player p = (Player) sender;        CuboidRegion cr = ss.getSelection(p.getUniqueId());        if (cr == null) {            sender.sendMessage(PGMessages.warn("先に金の斧で保護する範囲を選択してください。"));            return true;        }        RegionContainer rc = WorldGuard.getInstance().getPlatform().getRegionContainer();        RegionManager rm = rc.get(BukkitAdapter.adapt(p.getWorld()));        long used = PlayerGuard.getInstance().getProtectionUsed(p);        long limit = PlayerGuard.getInstance().getProtectLimit(p);        if (36 > cr.getVolume()) {            sender.sendMessage(PGMessages.error("保護領域の最小サイズは36ブロックです。現在サイズ: %s", PGMessages.highlight(cr.getVolume())));            return true;        }        if (!PlayerGuard.getInstance().getPaidExtensionConfig().enabled() && limit < used + cr.getVolume()) {            ss.clear(p.getUniqueId());            p.sendMessage(PGMessages.error(                    "保護上限を超えています。使用量: %s / 追加分: %s / 上限: %s",                    PGMessages.highlight(used + cr.getVolume()),                    PGMessages.highlight(cr.getVolume()),                    PGMessages.highlight(limit)            ));            return true;        }        Set<String> allRegionIds = new HashSet<>();        rc.getLoaded().forEach(rm2 -> allRegionIds.addAll(rm2.getRegions().keySet()));        String id = Integer.toHexString(new Random().nextInt(0x10000000));        int timeout = 30;        boolean timedout = false;        while (allRegionIds.contains(id)) {            id = Integer.toHexString(new Random().nextInt(0x10000000));            timeout--;            if (timeout <= 0) {                timedout = true;                break;            }        }        if (timedout) {            sender.sendMessage(PGMessages.error("領域IDを生成できませんでした。もう一度試してください。"));            return true;        }        ProtectedRegion protect = new ProtectedCuboidRegion(id, cr.getPos1(), cr.getPos2());        protect.getOwners().addPlayer(p.getUniqueId());        RegionRoles.setPrimaryOwner(protect, p.getUniqueId());        GuardFlags.initRegionFlags(protect);        protect.setFlag(PlayerGuard.getGuardRegisteredFlag(), StateFlag.State.ALLOW);        ApplicableRegionSet ars = rm.getApplicableRegions(protect);        long count = ars.getRegions().stream()                .filter(pr -> !(pr instanceof GlobalProtectedRegion))                .count();        if (count > 0 || ars.testState(WorldGuardPlugin.inst().wrapPlayer(p), PlayerGuard.getGuardIgnoredFlag())) {            sender.sendMessage(PGMessages.error("ほかの保護領域と重なっています。"));            return true;        }        long minDistance = Long.MAX_VALUE;        for (ProtectedRegion otherRegion : rm.getRegions().values()) {            if (otherRegion.getFlag(PlayerGuard.getGuardRegisteredFlag()) != StateFlag.State.ALLOW) continue;            if (!PGConfig.doApplyToSamePlayerSRegion() && otherRegion.getOwners().contains(p.getUniqueId())) continue;            long d = PGUtil.distanceBetweenRegions(protect, otherRegion);            if (d < 0) continue;            minDistance = Math.min(minDistance, d);        }        if (minDistance <= PGConfig.getMinSpacingBetweenRegions()) {            sender.sendMessage(PGMessages.error("ほかの領域との距離が近すぎます。最短距離: %s", PGMessages.highlight(minDistance)));            return true;        }        final String regionId = id;        PlayerGuard.getInstance().getScheduler().runGlobal(() -> {
-            PlayerGuard plugin = PlayerGuard.getInstance();
-            long before = plugin.getProtectionUsed(p);
-            long after; try { after = Math.addExact(before, protect.volume()); } catch (ArithmeticException ex) { p.sendMessage(PGMessages.error("Protection volume overflow.")); return; }
-            BigDecimal charge = BigDecimal.ZERO;
-            if (plugin.getPaidExtensionConfig().enabled()) {
-                if (!plugin.getEconomyTransactionService().available()) { p.sendMessage("§c有料土地保護は現在利用できません。経済プラグインが見つかりません。"); return; }
-                charge = plugin.getProgressivePricingService().calculate(before, after, plugin.getProtectLimit(p));
-                double balance = plugin.getEconomyTransactionService().balance(p);
-                if (charge.signum() > 0 && BigDecimal.valueOf(balance).compareTo(charge) < 0) { p.sendMessage("§c追加の土地保護には §e" + String.format("%,.2f", charge) + "円 §c必要ですが、所持金が足りません。（所持金: " + String.format("%,.2f", balance) + "円）"); return; }
-                if (charge.signum() > 0 && !plugin.getEconomyTransactionService().withdraw(p, charge)) { p.sendMessage("§c決済に失敗したため、土地保護を作成しませんでした。"); return; }
-            }
-            try {
-                rm.addRegion(protect);
-                plugin.getProtectionPaymentRepository().save(protect, new ProtectionPaymentRecord(p.getUniqueId(), regionId, protect.volume(), Math.max(0, after - Math.max(before, plugin.getProtectLimit(p))), charge, Instant.now(), false));
-                ss.clear(p.getUniqueId());
-            } catch (RuntimeException ex) {
-                rm.removeRegion(regionId); if (charge.signum() > 0) plugin.getEconomyTransactionService().deposit(p, charge);
-                p.sendMessage("§c土地保護の保存に失敗したため、決済を取り消しました。"); return;
-            }
-            p.sendMessage(PGMessages.success("Protection region %s created.", PGMessages.highlight(regionId)));
-        });       return true;    }    @Override    public List<String> onTabComplete(CommandSender sender, Command command, String label, String[] args) {        return Collections.emptyList();    }}
+package net.nekozouneko.playerguard.command;
+
+import net.nekozouneko.playerguard.PlayerGuard;
+import org.bukkit.ChatColor;
+import org.bukkit.command.Command;
+import org.bukkit.command.CommandExecutor;
+import org.bukkit.command.CommandSender;
+import org.bukkit.command.TabCompleter;
+import org.bukkit.entity.Player;
+
+import java.util.Collections;
+import java.util.List;
+
+public class ClaimCommand implements CommandExecutor, TabCompleter {
+    @Override
+    public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
+        if (!(sender instanceof Player)) {
+            sender.sendMessage(ChatColor.RED + "このコマンドはプレイヤーのみ実行できます。");
+            return true;
+        }
+        Player player = (Player) sender;
+        if (!PlayerGuard.getInstance().getCreationConfirmationManager().hasPending(player.getUniqueId())) {
+            player.sendMessage(ChatColor.RED + "確認待ちの土地保護がありません。");
+            player.sendMessage(ChatColor.GRAY + "金の斧で保護範囲を選択してください。");
+            return true;
+        }
+        return PlayerGuard.getInstance().getCreationConfirmationManager().confirm(player);
+    }
+
+    @Override
+    public List<String> onTabComplete(CommandSender sender, Command command, String label, String[] args) {
+        return Collections.emptyList();
+    }
+}

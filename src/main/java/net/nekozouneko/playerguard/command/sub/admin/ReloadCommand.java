@@ -12,7 +12,8 @@ public class ReloadCommand extends SubCommand {
     @Override
     public boolean execute(CommandSender sender, Command command, String label, List<String> args) {
         PlayerGuard.getInstance().reload();
-        sender.sendMessage("再読み込みしました。");
+        sender.sendMessage("§aPlayerGuard の設定を再読み込みしました。");
+        sender.sendMessage("§7確認待ちの土地保護作成は取り消しました。管理画面は閉じています。");
         return true;
     }
 

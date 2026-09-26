@@ -15,15 +15,44 @@ protection:
     6: 100000    # プレイ6日目以降
     7: 120000   # プレイ7日目以降（以降は新しいキーを追記すると拡張できる）
 
+  creation-confirmation:
+    default-mode: GUI
+    chat-timeout-seconds: 600
+
   paid-extension:
     enabled: true
     rates:
-      120000: 0.02
-      200000: 0.04
-      300000: 0.08
-      500000: 0.15
+      120000: 0.01
+      200000: 0.02
+      300000: 0.04
+      500000: 0.08
     allow-refund-on-delete: true
     refund-rate: 0.5
+    refund-policy:
+      enabled: true
+      cooling-off-minutes: 30
+      cooling-off-rate: 1.0
+      normal-period-days: 7
+      normal-refund-rate: 0.8
+      long-term-refund-rate: 0.5
+
+  teleport:
+    enabled: true
+    setup-cost: 1000.0
+    teleport-cost: 300.0
+
+  # 進入できない保護へ入ろうとしたとき、画面中央にタイトルを出し入場を止める。
+  # 徒歩は境界で停止。ジャンプ・エリトラ等は外側の近くへ退避する
+  # （WorldGuard の空中引き戻しはアンチチートの飛行キックの原因になる）。
+  denied-entry-relocation:
+    enabled: true
+    search-radius: 8
+    search-down: 48
+
+  # 保護ごとのプレイヤーブラックリスト。登録されたプレイヤーは
+  # メンバーであっても侵入・建築・操作を拒否される。
+  blacklist:
+    enabled: true
 
   flags:
     break: true
@@ -42,6 +71,12 @@ protection:
   spacing:
     min-spacing-between-regions: 0
     apply-to-same-player-s-region: false
+
+  logs:
+    enabled: true
+    max-entries-per-protection: 1000
+    visitor-log-enabled: true
+    visitor-log-max-entries: 300
 
 visitor-log:
   enabled: true

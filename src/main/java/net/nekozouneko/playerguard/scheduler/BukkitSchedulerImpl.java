@@ -50,6 +50,11 @@ final class BukkitSchedulerImpl implements PGScheduler {
     }
 
     @Override
+    public boolean isOwnedByCurrentRegion(Entity entity) {
+        return true;
+    }
+
+    @Override
     public void cancelAll() {
         synchronized (tasks) {
             for (BukkitTask t : tasks) t.cancel();

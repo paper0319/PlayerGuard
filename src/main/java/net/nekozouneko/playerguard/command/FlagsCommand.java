@@ -5,6 +5,7 @@ import net.md_5.bungee.api.ChatColor;
 import net.nekozouneko.playerguard.PGUtil;
 import net.nekozouneko.playerguard.PlayerGuard;
 import net.nekozouneko.playerguard.gui.MenuGUI;
+import net.nekozouneko.playerguard.region.ProtectionAccess;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
@@ -27,7 +28,7 @@ public class FlagsCommand implements CommandExecutor, TabCompleter {
 
         ProtectedRegion pr = PGUtil.getCurrentPositionRegion(p);
 
-        if (pr == null || !pr.getOwners().contains(p.getUniqueId())) {
+        if (pr == null || !ProtectionAccess.canManageFlags(p, pr)) {
             sender.sendMessage(ChatColor.DARK_RED+"■ "+ChatColor.RED+"ここにはあなたが管理できる保護領域がありません。");
             return true;
         }
