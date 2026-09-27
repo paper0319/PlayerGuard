@@ -17,6 +17,7 @@ import net.nekozouneko.playerguard.PlayerGuard;
 import net.nekozouneko.playerguard.region.DeniedEntryRelocation;
 import net.nekozouneko.playerguard.region.RegionBlacklist;
 import net.nekozouneko.playerguard.region.RegionRoles;
+import net.nekozouneko.playerguard.scheduler.PGScheduler;
 import org.bukkit.GameMode;
 import org.bukkit.Location;
 import org.bukkit.World;
@@ -39,14 +40,21 @@ import java.util.concurrent.ConcurrentHashMap;
  * 進入拒否の保護への入場を止める。
  * 徒歩は境界で止め、ジャンプ・エリトラ等は保護の外側近くへ退避する。
  * 空中引き戻しはアンチチートの飛行判定になりやすい。
+ * そのため退避は同じ tick 内のテレポートで行い、落下を途中で止めない。
  */
 public class DeniedEntryListener implements Listener {
 
     private static final long TITLE_COOLDOWN_MS = 1500L;
+    /**
+     * 退避のクールダウン。落下中は毎 tick 進入判定が走るので、
+     * 同じ退避が重複して要求されるのを防ぐ。
+     */
+    private static final long EJECT_COOLDOWN_MS = 200L;
     private static final double CLOSE_DISTANCE_SQUARED = 64.0;
     private static final Vector ZERO = new Vector();
 
     private final Map<UUID, Long> lastTitleAt = new ConcurrentHashMap<>();
+    private final Map<UUID, Long> ejectRequestedAt = new ConcurrentHashMap<>();
 
     @EventHandler(priority = EventPriority.NORMAL, ignoreCancelled = true)
     public void onMove(PlayerMoveEvent event) {
@@ -68,41 +76,95 @@ public class DeniedEntryListener implements Listener {
                 player.isInsideVehicle(), player.isOnGround(), player.getFallDistance(),
                 alreadyInside);
 
-        if (forceTeleport) {
-            stopMotion(player);
-            Location dest = destination(player, denied, from, to);
-            if (dest == null) {
-                event.setTo(from);
-            } else {
-                Location thisTick;
-                if (from.distanceSquared(dest) <= CLOSE_DISTANCE_SQUARED) {
-                    thisTick = dest;
-                } else {
-                    thisTick = from.clone();
-                    thisTick.setYaw(dest.getYaw());
-                    thisTick.setPitch(dest.getPitch());
-                }
-                event.setTo(thisTick);
-                player.teleportAsync(dest).thenAccept(ok -> {
-                    PlayerGuard plugin = PlayerGuard.getInstance();
-                    if (plugin == null || plugin.getScheduler() == null) return;
-                    plugin.getScheduler().runOnEntity(player, () -> {
-                        player.setGliding(false);
-                        if (player.isFlying()) player.setFlying(false);
-                        player.setVelocity(ZERO);
-                        player.setFallDistance(0);
-                    });
-                });
-            }
-        } else {
+        if (!forceTeleport) {
             event.setTo(from);
+            ejectRequestedAt.remove(player.getUniqueId());
+            showDeniedTitle(player);
+            return;
         }
+
+        UUID id = player.getUniqueId();
+        long now = System.currentTimeMillis();
+        Long requestedAt = ejectRequestedAt.get(id);
+        if (requestedAt != null && now - requestedAt < EJECT_COOLDOWN_MS) {
+            // 直前の退避がまだ処理中なので、重ねてテレポートしない。
+            event.setTo(from);
+            showDeniedTitle(player);
+            return;
+        }
+        ejectRequestedAt.put(id, now);
+
+        // 退避前に落とすのは乗り物・滑翔・飛行だけ。落下速度は TP 確定後に止める。
+        releaseMotion(player);
+
+        Ejection ejection = destination(player, denied, from, to);
+        if (ejection == null) {
+            ejectRequestedAt.remove(id);
+            event.setTo(from);
+            showDeniedTitle(player);
+            return;
+        }
+        eject(event, player, ejection.location(), from, ejection.standable());
         showDeniedTitle(player);
     }
 
     @EventHandler
     public void onQuit(PlayerQuitEvent event) {
-        lastTitleAt.remove(event.getPlayer().getUniqueId());
+        UUID id = event.getPlayer().getUniqueId();
+        lastTitleAt.remove(id);
+        ejectRequestedAt.remove(id);
+    }
+
+    /**
+     * 退避先に移動する。
+     * 移動イベントはエンティティの所有スレッドで発火するため、通常は同期テレポートで同じ tick に着地する。
+     * 非同期になるのは退避先が別リージョンにある場合だけで、その間だけ保護の外で留まる。
+     * そこで落下速度を止めると、アンチチートに飛行と判定される。
+     */
+    private void eject(PlayerMoveEvent event, Player player, Location dest, Location from, boolean standable) {
+        PGScheduler scheduler = scheduler();
+        if (scheduler == null || scheduler.isOwnedByCurrentRegion(dest)) {
+            // 同期テレポートでは setTo をしてはいけない。
+            // CraftBukkit はイベント後に event.getTo() の位置へ呼び戻すため、
+            // setTo を呼ぶとここで決めた位置が上書きされる。
+            settle(player, player.teleport(dest), standable);
+            return;
+        }
+        // 別リージョンへの移動は非同期になる。その間だけ位置を固定し、保護内へ入れさせない。
+        if (from.distanceSquared(dest) <= CLOSE_DISTANCE_SQUARED) {
+            event.setTo(dest);
+        } else {
+            // 遠い場合は向きだけ先に反映し、位置ズレ（=飛行判定）を抑える。
+            Location thisTick = from.clone();
+            thisTick.setYaw(dest.getYaw());
+            thisTick.setPitch(dest.getPitch());
+            event.setTo(thisTick);
+        }
+        player.teleportAsync(dest).thenAccept(ok -> settle(player, ok, standable));
+    }
+
+    /**
+     * テレポートの成否にかかわらず状態を解放する。
+     * 失敗（他プラグインにキャンセルされた等）でもクールダウンを解放するので、
+     * 保護内に留まったまま再試行できなくなることはない。
+     */
+    private void settle(Player player, boolean teleported, boolean standable) {
+        ejectRequestedAt.remove(player.getUniqueId());
+        if (!teleported) return;
+        PGScheduler scheduler = scheduler();
+        if (scheduler == null) return;
+        if (standable) {
+            // 位置が移ったあとで運動状態を止める。先に止めると空中で静止し飛行判定される。
+            scheduler.runOnEntity(player, () -> stopMotion(player));
+        } else {
+            // 足場が見つからず空中に退避した場合は落下を止めない。止めると空中で静止する。
+            scheduler.runOnEntity(player, () -> releaseMotion(player));
+        }
+    }
+
+    private static PGScheduler scheduler() {
+        PlayerGuard plugin = PlayerGuard.getInstance();
+        return plugin == null ? null : plugin.getScheduler();
     }
 
     private void showDeniedTitle(Player player) {
@@ -113,10 +175,15 @@ public class DeniedEntryListener implements Listener {
         player.sendTitle(PGMessages.deniedEntryTitle(), PGMessages.deniedEntrySubtitle(), 5, 40, 10);
     }
 
-    private static void stopMotion(Player player) {
+    /** 退避直前に解除する運動状態。落下速度は {@link #stopMotion(Player)} で TP 確定後に止める。 */
+    private static void releaseMotion(Player player) {
         if (player.isInsideVehicle()) player.leaveVehicle();
-        player.setGliding(false);
+        if (player.isGliding()) player.setGliding(false);
         if (player.isFlying()) player.setFlying(false);
+    }
+
+    private static void stopMotion(Player player) {
+        releaseMotion(player);
         player.setVelocity(ZERO);
         player.setFallDistance(0);
     }
@@ -158,7 +225,10 @@ public class DeniedEntryListener implements Listener {
         return RegionRoles.roleOf(region, playerId) == RegionRoles.Role.NONE;
     }
 
-    private static Location destination(Player player, ProtectedRegion region, Location from, Location to) {
+    /** 退避先と、そこに足場があるかどうか。足場が無い場合は落下を止められない。 */
+    private record Ejection(Location location, boolean standable) {}
+
+    private static Ejection destination(Player player, ProtectedRegion region, Location from, Location to) {
         World world = from.getWorld();
         if (world == null) return null;
 
@@ -181,7 +251,7 @@ public class DeniedEntryListener implements Listener {
         if (safe == null) {
             player.addPotionEffect(new PotionEffect(PotionEffectType.SLOW_FALLING, 80, 0, false, false, false));
         }
-        return loc;
+        return new Ejection(loc, safe != null);
     }
 
     private static final class RegionStandingSpace implements DeniedEntryRelocation.StandingSpace {
