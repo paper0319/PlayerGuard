@@ -123,4 +123,14 @@ public final class PGUtil {
     public static long delta(long a, long b) {
         return Math.abs(a - b);
     }
+
+    public static boolean classExists(String className) {
+        try {
+            Class.forName(className);
+            return true;
+        }
+        catch (ClassNotFoundException e) {
+            return false;
+        }
+    }
 }

@@ -1,8 +1,6 @@
 package net.nekozouneko.playerguard.task;
 
 import com.sk89q.worldedit.regions.CuboidRegion;
-import com.sk89q.worldguard.WorldGuard;
-import com.sk89q.worldguard.internal.platform.WorldGuardPlatform;
 import com.sk89q.worldguard.protection.regions.ProtectedRegion;
 import net.md_5.bungee.api.ChatColor;
 import net.md_5.bungee.api.ChatMessageType;
@@ -19,8 +17,6 @@ import org.bukkit.inventory.ItemStack;
 import java.util.stream.Collectors;
 
 public class ActionbarTask implements Runnable {
-
-    private final WorldGuardPlatform platform = WorldGuard.getInstance().getPlatform();
 
     @Override
     public void run() {
