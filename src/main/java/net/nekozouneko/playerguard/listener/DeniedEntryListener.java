@@ -41,6 +41,10 @@ import java.util.concurrent.ConcurrentHashMap;
  * 徒歩は境界で止め、ジャンプ・エリトラ等は保護の外側近くへ退避する。
  * 空中引き戻しはアンチチートの飛行判定になりやすい。
  * そのため退避は同じ tick 内のテレポートで行い、落下を途中で止めない。
+ *
+ * <p>退避先は必ず保護の外側かつ通過可能な位置に限る。
+ * 退避先が見つからないときはテレポートせず、移動も妨げない。
+ * そうしないとプレイヤーが保護の中で動けなくなる。
  */
 public class DeniedEntryListener implements Listener {
 
@@ -52,6 +56,8 @@ public class DeniedEntryListener implements Listener {
     private static final long EJECT_COOLDOWN_MS = 200L;
     private static final double CLOSE_DISTANCE_SQUARED = 64.0;
     private static final Vector ZERO = new Vector();
+    /** 足場が無い場所へ退避したときの落下方向。水平成分は残さない。 */
+    private static final Vector FALLING = new Vector(0.0D, -0.2D, 0.0D);
 
     private final Map<UUID, Long> lastTitleAt = new ConcurrentHashMap<>();
     private final Map<UUID, Long> ejectRequestedAt = new ConcurrentHashMap<>();
@@ -100,6 +106,13 @@ public class DeniedEntryListener implements Listener {
         Ejection ejection = destination(player, denied, from, to);
         if (ejection == null) {
             ejectRequestedAt.remove(id);
+            if (alreadyInside) {
+                // 既に保護の中にいて退避先も作れない場合は、移動そのものを妨げない。
+                // ここで event.setTo すると、戻る先が無いまま動きが出せなくなる。
+                // ブロック破壊や設置などの保護そのものは従来どおり拒否される。
+                showDeniedTitle(player);
+                return;
+            }
             event.setTo(from);
             showDeniedTitle(player);
             return;
@@ -158,7 +171,7 @@ public class DeniedEntryListener implements Listener {
             scheduler.runOnEntity(player, () -> stopMotion(player));
         } else {
             // 足場が見つからず空中に退避した場合は落下を止めない。止めると空中で静止する。
-            scheduler.runOnEntity(player, () -> releaseMotion(player));
+            scheduler.runOnEntity(player, () -> keepFalling(player));
         }
     }
 
@@ -186,6 +199,17 @@ public class DeniedEntryListener implements Listener {
         releaseMotion(player);
         player.setVelocity(ZERO);
         player.setFallDistance(0);
+    }
+
+    /**
+     * 足場の無い場所へ退避したときは真下方向へ落とし続ける。
+     * 水平速度をそのままだと次の tick で再び保護の中へ入り込み、
+     * 同じ場所へ退避され続けて脱出できない。
+     */
+    private static void keepFalling(Player player) {
+        releaseMotion(player);
+        player.setVelocity(FALLING);
+        player.addPotionEffect(new PotionEffect(PotionEffectType.SLOW_FALLING, 80, 0, false, false, false));
     }
 
     private static boolean sameBlock(Location from, Location to) {
@@ -236,22 +260,19 @@ public class DeniedEntryListener implements Listener {
         BlockVector3 max = region.getMaximumPoint();
         DeniedEntryRelocation.Bounds bounds = new DeniedEntryRelocation.Bounds(
                 min.x(), min.y(), min.z(), max.x(), max.y(), max.z());
-        DeniedEntryRelocation.BlockPos anchor = DeniedEntryRelocation.exteriorAnchor(
-                bounds, from.getX(), from.getY(), from.getZ(), to.getX(), to.getY(), to.getZ());
 
         RegionManager rm = WorldGuard.getInstance().getPlatform().getRegionContainer()
                 .get(BukkitAdapter.adapt(world));
         DeniedEntryRelocation.StandingSpace space = new RegionStandingSpace(world, region, rm, player.getUniqueId());
-        DeniedEntryRelocation.BlockPos safe = DeniedEntryRelocation.findSafe(
-                space, anchor, PGConfig.getDeniedEntryRelocationSearchRadius(), PGConfig.getDeniedEntryRelocationSearchDown());
+        DeniedEntryRelocation.Relocation relocation = DeniedEntryRelocation.relocate(
+                space, bounds, PGConfig.getDeniedEntryRelocationSearchRadius(), PGConfig.getDeniedEntryRelocationSearchDown(),
+                from.getX(), from.getY(), from.getZ(), to.getX(), to.getY(), to.getZ());
+        if (relocation == null) return null;
 
-        DeniedEntryRelocation.BlockPos dest = safe != null ? safe : anchor;
+        DeniedEntryRelocation.BlockPos dest = relocation.pos();
         float yaw = DeniedEntryRelocation.yawAway(bounds, dest.x() + 0.5, dest.z() + 0.5);
         Location loc = new Location(world, dest.x() + 0.5, dest.y(), dest.z() + 0.5, yaw, 0f);
-        if (safe == null) {
-            player.addPotionEffect(new PotionEffect(PotionEffectType.SLOW_FALLING, 80, 0, false, false, false));
-        }
-        return new Ejection(loc, safe != null);
+        return new Ejection(loc, relocation.standable());
     }
 
     private static final class RegionStandingSpace implements DeniedEntryRelocation.StandingSpace {
@@ -274,11 +295,17 @@ public class DeniedEntryListener implements Listener {
         @Override
         public boolean canStand(int x, int y, int z) {
             if (y <= world.getMinHeight() || y >= world.getMaxHeight() - 1) return false;
-            Block feet = world.getBlockAt(x, y, z);
-            Block head = world.getBlockAt(x, y + 1, z);
             Block below = world.getBlockAt(x, y - 1, z);
-            if (below.isLiquid() || !below.getType().isSolid() || !feet.isPassable() || !head.isPassable()) return false;
-            return !blockedByOtherDeny(x, y, z);
+            if (below.isLiquid() || !below.getType().isSolid()) return false;
+            return passable(x, y, z);
+        }
+
+        @Override
+        public boolean passable(int x, int y, int z) {
+            if (y <= world.getMinHeight() || y >= world.getMaxHeight() - 1) return false;
+            return world.getBlockAt(x, y, z).isPassable()
+                    && world.getBlockAt(x, y + 1, z).isPassable()
+                    && !blockedByOtherDeny(x, y, z);
         }
 
         @Override

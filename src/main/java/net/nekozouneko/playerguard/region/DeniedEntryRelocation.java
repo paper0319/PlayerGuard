@@ -3,10 +3,22 @@ package net.nekozouneko.playerguard.region;
 /**
  * 進入拒否された保護の外側へ退避する座標を、Bukkit に依存せず計算する。
  * エリトラ等の高速移動では WorldGuard の空中引き戻しではなく、当たった面の外側を使う。
+ *
+ * <p>返るのは必ず「保護の外側かつ通過できる」位置だけ。
+ * 足場が見つからなくても空間の有無を確かめてから諦める。
+ * 実体ブロックや保護の中へ退避させるとプレイヤーが詰まり、
+ * 次の移動で同じ場所へ戻され続けて脱出できなくなるため。
  */
 public final class DeniedEntryRelocation {
 
     public static final int EXTERIOR_OFFSET = 2;
+    /** アンカー直下を何倍まで深く足場探しに行くか。崖の麓まで届かない場合の保険。 */
+    private static final int DEEP_DOWN_FACTOR = 4;
+    /** アンカー位置より足場を探す高さ。 */
+    private static final int UP_NEAR = 4;
+    private static final int UP_FAR = 48;
+    /** 足場なし・真上への退避で用いる探索半径。 */
+    private static final int NARROW_RADIUS = 2;
 
     public record Bounds(int minX, int minY, int minZ, int maxX, int maxY, int maxZ) {
         public boolean contains(int x, int y, int z) {
@@ -20,8 +32,13 @@ public final class DeniedEntryRelocation {
         int minY();
         int maxY();
         boolean canStand(int x, int y, int z);
+        /** 足場を要せず、固体でも他の進入拒否保護でもない空間か。 */
+        boolean passable(int x, int y, int z);
         boolean denied(int x, int y, int z);
     }
+
+    /** 退避先と、そこに足場があるかどうか。足場が無い場合は落下を止められない。 */
+    public record Relocation(BlockPos pos, boolean standable) {}
 
     enum Face { NONE, MIN_X, MAX_X, MIN_Y, MAX_Y, MIN_Z, MAX_Z }
 
@@ -30,42 +47,66 @@ public final class DeniedEntryRelocation {
     public static BlockPos exteriorAnchor(Bounds bounds,
                                           double fromX, double fromY, double fromZ,
                                           double toX, double toY, double toZ) {
-        Hit hit = firstHit(bounds, fromX, fromY, fromZ, toX, toY, toZ);
-        Face face;
-        double hx;
-        double hz;
-        if (hit == null) {
-            face = nearestHorizontalFace(bounds, fromX, fromZ);
-            hx = fromX;
-            hz = fromZ;
-        } else {
-            face = hit.face;
-            hx = hit.x;
-            hz = hit.z;
-            if (face == Face.MIN_Y || face == Face.MAX_Y) {
-                face = nearestHorizontalFace(bounds, hx, hz);
-            }
-        }
-        return offsetFromHit(bounds, face, hx, fromY, hz);
+        return anchor(bounds, firstHit(bounds, fromX, fromY, fromZ, toX, toY, toZ),
+                fromX, fromY, fromZ);
     }
 
-    public static BlockPos findSafe(StandingSpace space, BlockPos anchor, int radius, int searchDown) {
-        if (space == null || anchor == null) return null;
-        int radiusClamped = Math.max(0, radius);
-        int startY = clamp(anchor.y() + 4, space.minY() + 1, space.maxY() - 2);
-        int endY = Math.max(space.minY() + 1, Math.min(anchor.y(), startY) - Math.max(0, searchDown));
-        BlockPos found = searchColumn(space, anchor.x(), anchor.z(), startY, endY);
-        if (found != null) return found;
-        for (int r = 1; r <= radiusClamped; r++) {
-            for (int dx = -r; dx <= r; dx++) {
-                for (int dz = -r; dz <= r; dz++) {
-                    if (Math.max(Math.abs(dx), Math.abs(dz)) != r) continue;
-                    found = searchColumn(space, anchor.x() + dx, anchor.z() + dz, startY, endY);
-                    if (found != null) return found;
-                }
-            }
+    /**
+     * 保護の外側へ退避する先を決める。
+     * 当たった面の外側から足場を探し、上にも足場があれば上へ出す。
+     * 足場が無くても空間の有る場所へ退避し、どこにも空間が無いときだけ null を返す。
+     * null のときは呼び出し側でテレポートを諦める。
+     */
+    public static Relocation relocate(StandingSpace space, Bounds bounds, int radius, int searchDown,
+                                      double fromX, double fromY, double fromZ,
+                                      double toX, double toY, double toZ) {
+        if (space == null || bounds == null) return null;
+
+        Hit hit = firstHit(bounds, fromX, fromY, fromZ, toX, toY, toZ);
+        BlockPos anchor = anchor(bounds, hit, fromX, fromY, fromZ);
+        boolean alreadyInside = bounds.contains(floor(fromX), floor(fromY), floor(fromZ));
+
+        int hint = boundedY(space, floor(fromY));
+        int wide = Math.max(0, radius);
+        int down = Math.max(0, searchDown);
+        int narrow = Math.min(wide, NARROW_RADIUS);
+        int over = boundedY(space, bounds.maxY() + 1);
+
+        // 足場。従来どおりまずアンカー直下から下へ、次に周囲へ。
+        BlockPos found = searchRing(space, anchor.x(), anchor.z(), wide,
+                hint + UP_NEAR, hint - down, true, false);
+        if (found == null) {
+            // 上側の地面。崖の上に立つプレイヤーが上から侵入したケース。
+            found = searchRing(space, anchor.x(), anchor.z(), wide,
+                    hint + UP_FAR, hint + 1, true, true);
         }
-        return null;
+        if (found == null) {
+            // アンカー直下の崖を深く探す。1 列分だけなので探索量は小さい。
+            found = searchRing(space, anchor.x(), anchor.z(), 0,
+                    hint - down - 1, hint - down * DEEP_DOWN_FACTOR, true, false);
+        }
+        if (found == null && alreadyInside) {
+            // 既に保護の中にいるときは真上も候補にする。
+            // 大きな保護の中央から側面まで数百ブロック飛ばされるのを避ける。
+            found = searchRing(space, floor(fromX), floor(fromZ), narrow,
+                    over + UP_NEAR, over - down, true, false);
+        }
+
+        if (found != null) return new Relocation(found, true);
+
+        // 足場が無くても固体の中へは入れない。落下は途中で止めない。
+        found = searchRing(space, anchor.x(), anchor.z(), narrow,
+                hint + UP_NEAR, hint - down * DEEP_DOWN_FACTOR, false, false);
+        if (found == null) {
+            found = searchRing(space, anchor.x(), anchor.z(), narrow,
+                    hint + UP_FAR, hint + 1, false, true);
+        }
+        if (found == null && alreadyInside) {
+            found = searchRing(space, floor(fromX), floor(fromZ), narrow,
+                    over + UP_NEAR, over - down * DEEP_DOWN_FACTOR, false, false);
+        }
+
+        return found == null ? null : new Relocation(found, false);
     }
 
     /**
@@ -169,6 +210,22 @@ public final class DeniedEntryRelocation {
         return face;
     }
 
+    /** 当たった面（なければ最寄り側面）の外側 2 マス。Y は侵入した高さのまま。 */
+    private static BlockPos anchor(Bounds b, Hit hit, double fromX, double fromY, double fromZ) {
+        double hx = fromX;
+        double hz = fromZ;
+        Face face = nearestHorizontalFace(b, fromX, fromZ);
+        if (hit != null) {
+            hx = hit.x;
+            hz = hit.z;
+            face = hit.face;
+            if (face == Face.MIN_Y || face == Face.MAX_Y) {
+                face = nearestHorizontalFace(b, hx, hz);
+            }
+        }
+        return offsetFromHit(b, face, hx, fromY, hz);
+    }
+
     private static BlockPos offsetFromHit(Bounds b, Face face, double hx, double hy, double hz) {
         int y = floor(hy);
         int x = floor(hx);
@@ -186,10 +243,37 @@ public final class DeniedEntryRelocation {
         }
     }
 
-    private static BlockPos searchColumn(StandingSpace space, int x, int z, int startY, int endY) {
-        for (int y = startY; y >= endY; y--) {
+    private static int boundedY(StandingSpace space, int y) {
+        return clamp(y, space.minY() + 1, space.maxY() - 2);
+    }
+
+    /** アンカー列から {@code radius} マスの角まで外側へ回的しつつ、Y を走査して最初の一致を返す。 */
+    private static BlockPos searchRing(StandingSpace space, int cx, int cz, int radius,
+                                       int fromY, int toY, boolean needGround, boolean ascending) {
+        BlockPos found = searchColumn(space, cx, cz, fromY, toY, needGround, ascending);
+        if (found != null) return found;
+        for (int r = 1; r <= radius; r++) {
+            for (int dx = -r; dx <= r; dx++) {
+                for (int dz = -r; dz <= r; dz++) {
+                    if (Math.max(Math.abs(dx), Math.abs(dz)) != r) continue;
+                    found = searchColumn(space, cx + dx, cz + dz, fromY, toY, needGround, ascending);
+                    if (found != null) return found;
+                }
+            }
+        }
+        return null;
+    }
+
+    private static BlockPos searchColumn(StandingSpace space, int x, int z,
+                                         int fromY, int toY, boolean needGround, boolean ascending) {
+        int low = boundedY(space, Math.min(fromY, toY));
+        int high = boundedY(space, Math.max(fromY, toY));
+        int start = ascending ? low : high;
+        int end = ascending ? high : low;
+        int step = ascending ? 1 : -1;
+        for (int y = start; ascending ? y <= end : y >= end; y += step) {
             if (space.denied(x, y, z)) continue;
-            if (space.canStand(x, y, z)) return new BlockPos(x, y, z);
+            if (needGround ? space.canStand(x, y, z) : space.passable(x, y, z)) return new BlockPos(x, y, z);
         }
         return null;
     }
