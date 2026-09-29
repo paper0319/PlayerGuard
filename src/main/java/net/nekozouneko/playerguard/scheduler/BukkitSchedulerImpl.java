@@ -55,6 +55,11 @@ final class BukkitSchedulerImpl implements PGScheduler {
     }
 
     @Override
+    public boolean isRegionThreaded() {
+        return false;
+    }
+
+    @Override
     public void cancelAll() {
         synchronized (tasks) {
             for (BukkitTask t : tasks) t.cancel();

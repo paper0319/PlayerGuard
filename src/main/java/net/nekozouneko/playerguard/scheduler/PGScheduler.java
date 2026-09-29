@@ -28,6 +28,15 @@ public interface PGScheduler {
     /** 指定エンティティが現在のリージョンスレッドに所有されているか。Bukkit では常に true。 */
     boolean isOwnedByCurrentRegion(Entity entity);
 
+    /**
+     * リージョン単位のスレッド上で動いているか。
+     * Folia 系では常に true になる。
+     * この状態の {@code Entity#teleport} は
+     * 「Must use teleportAsync while in region threading」で必ず例外になるため、
+     * テレポートの方式を切り替える必要がある。
+     */
+    boolean isRegionThreaded();
+
     /** このスケジューラが起動した全タスクをキャンセルする。 */
     void cancelAll();
 

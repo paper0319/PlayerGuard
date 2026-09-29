@@ -69,6 +69,11 @@ final class FoliaScheduler implements PGScheduler {
     }
 
     @Override
+    public boolean isRegionThreaded() {
+        return true;
+    }
+
+    @Override
     public void cancelAll() {
         synchronized (tasks) {
             for (ScheduledTask t : tasks) {

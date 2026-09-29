@@ -40,7 +40,8 @@ import java.util.concurrent.ConcurrentHashMap;
  * 進入拒否の保護への入場を止める。
  * 徒歩は境界で止め、ジャンプ・エリトラ等は保護の外側近くへ退避する。
  * 空中引き戻しはアンチチートの飛行判定になりやすい。
- * そのため退避は同じ tick 内のテレポートで行い、落下を途中で止めない。
+ * そのためテレポートの完了を待ってから運動状態を止め、落下を途中で止めない。
+ * Folia 系ではリージョン所属スレッドで同期テレポートできないため teleportAsync を使う。
  *
  * <p>退避先は必ず保護の外側かつ通過可能な位置に限る。
  * 退避先が見つからないときはテレポートせず、移動も妨げない。
@@ -54,7 +55,6 @@ public class DeniedEntryListener implements Listener {
      * 同じ退避が重複して要求されるのを防ぐ。
      */
     private static final long EJECT_COOLDOWN_MS = 200L;
-    private static final double CLOSE_DISTANCE_SQUARED = 64.0;
     private static final Vector ZERO = new Vector();
     /** 足場が無い場所へ退避したときの落下方向。水平成分は残さない。 */
     private static final Vector FALLING = new Vector(0.0D, -0.2D, 0.0D);
@@ -117,7 +117,7 @@ public class DeniedEntryListener implements Listener {
             showDeniedTitle(player);
             return;
         }
-        eject(event, player, ejection.location(), from, ejection.standable());
+        eject(player, ejection.location(), ejection.standable());
         showDeniedTitle(player);
     }
 
@@ -130,29 +130,22 @@ public class DeniedEntryListener implements Listener {
 
     /**
      * 退避先に移動する。
-     * 移動イベントはエンティティの所有スレッドで発火するため、通常は同期テレポートで同じ tick に着地する。
-     * 非同期になるのは退避先が別リージョンにある場合だけで、その間だけ保護の外で留まる。
-     * そこで落下速度を止めると、アンチチートに飛行と判定される。
+     * Bukkit では同期テレポートで同じ tick に着地させる。
+     * Folia 系ではリージョン所属スレッドで同期テレポートすると必ず例外になるため
+     * teleportAsync に切り替える。移動イベントの発火スレッド自体がリージョン所属なので、
+     * 退避先が同じリージョンでも同期版は通らない。
      */
-    private void eject(PlayerMoveEvent event, Player player, Location dest, Location from, boolean standable) {
+    private void eject(Player player, Location dest, boolean standable) {
         PGScheduler scheduler = scheduler();
-        if (scheduler == null || scheduler.isOwnedByCurrentRegion(dest)) {
+        if (scheduler == null || !scheduler.isRegionThreaded()) {
             // 同期テレポートでは setTo をしてはいけない。
             // CraftBukkit はイベント後に event.getTo() の位置へ呼び戻すため、
             // setTo を呼ぶとここで決めた位置が上書きされる。
             settle(player, player.teleport(dest), standable);
             return;
         }
-        // 別リージョンへの移動は非同期になる。その間だけ位置を固定し、保護内へ入れさせない。
-        if (from.distanceSquared(dest) <= CLOSE_DISTANCE_SQUARED) {
-            event.setTo(dest);
-        } else {
-            // 遠い場合は向きだけ先に反映し、位置ズレ（=飛行判定）を抑える。
-            Location thisTick = from.clone();
-            thisTick.setYaw(dest.getYaw());
-            thisTick.setPitch(dest.getPitch());
-            event.setTo(thisTick);
-        }
+        // Folia 系では到着まで数 tick かかる。その間も落下速度は止めていないので、
+        // 保護の中に留まったまま動けなくなることはない。
         player.teleportAsync(dest).thenAccept(ok -> settle(player, ok, standable));
     }
 
