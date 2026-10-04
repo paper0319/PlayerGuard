@@ -83,7 +83,7 @@ public class DeniedEntryListener implements Listener {
                 alreadyInside);
 
         if (!forceTeleport) {
-            event.setTo(from);
+            event.setTo(holdBack(from, to));
             ejectRequestedAt.remove(player.getUniqueId());
             showDeniedTitle(player);
             return;
@@ -94,7 +94,7 @@ public class DeniedEntryListener implements Listener {
         Long requestedAt = ejectRequestedAt.get(id);
         if (requestedAt != null && now - requestedAt < EJECT_COOLDOWN_MS) {
             // 直前の退避がまだ処理中なので、重ねてテレポートしない。
-            event.setTo(from);
+            event.setTo(holdBack(from, to));
             showDeniedTitle(player);
             return;
         }
@@ -113,12 +113,20 @@ public class DeniedEntryListener implements Listener {
                 showDeniedTitle(player);
                 return;
             }
-            event.setTo(from);
+            event.setTo(holdBack(from, to));
             showDeniedTitle(player);
             return;
         }
         eject(player, ejection.location(), ejection.standable());
         showDeniedTitle(player);
+    }
+
+    /**
+     * 保護の手前（水平位置は from）に戻す。Y は to のままにして落下・上昇を止めない。
+     * from へ完全に戻すと空中で静止し続け、サーバーの飛行判定で蹴られて入れなくなる。
+     */
+    private static Location holdBack(Location from, Location to) {
+        return new Location(from.getWorld(), from.getX(), to.getY(), from.getZ(), to.getYaw(), to.getPitch());
     }
 
     @EventHandler
