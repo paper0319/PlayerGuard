@@ -127,7 +127,7 @@ public class BlacklistGUI extends AbstractGUI {
 
     @EventHandler
     public void onClick(InventoryClickEvent e) {
-        if (e.getInventory().getHolder() != this) return;
+        if (e.getView().getTopInventory().getHolder() != this) return;
         e.setCancelled(true);
 
         int slot = e.getRawSlot();
@@ -179,7 +179,7 @@ public class BlacklistGUI extends AbstractGUI {
             } else {
                 getPlayer().sendMessage(ChatColor.RED + "ブラックリストに追加できませんでした。");
             }
-            open();
+            navigateTo(this);
         }).open();
     }
 
@@ -190,7 +190,7 @@ public class BlacklistGUI extends AbstractGUI {
             getPlayer().sendMessage(ChatColor.GREEN + name + " をブラックリストから削除しました。");
             getPlayer().playSound(getPlayer().getLocation(), Sound.UI_BUTTON_CLICK, 10, 1);
         }
-        open();
+        navigateTo(this);
     }
 
     private void log(String action, String name, UUID uuid) {

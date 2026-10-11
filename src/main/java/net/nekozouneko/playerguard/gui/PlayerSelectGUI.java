@@ -83,7 +83,7 @@ public class PlayerSelectGUI extends AbstractGUI {
 
     @EventHandler
     public void onClick(InventoryClickEvent e) {
-        if (e.getInventory().getHolder() != this) return;
+        if (e.getView().getTopInventory().getHolder() != this) return;
         e.setCancelled(true);
 
         int slot = e.getRawSlot();

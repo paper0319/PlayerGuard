@@ -146,7 +146,7 @@ public class ProtectionCategoryGUI extends AbstractGUI {
             if (slot != slots[index]) {
                 continue;
             }
-            if (!ProtectionAccess.canManageProtection(getPlayer(), region)) {
+            if (!ProtectionAccess.canEditSettings(getPlayer(), region)) {
                 getPlayer().sendMessage(ChatColor.RED + "カテゴリを変更する権限がありません。");
                 return;
             }

@@ -24,7 +24,12 @@ public final class ProtectionAccess {
     }
     public static boolean canManageMembers(Player actor, ProtectedRegion region) { return actor != null && region != null && (isAdmin(actor) || RegionRoles.isPrimaryOwner(region, actor.getUniqueId()) || RegionRoles.roleOf(region, actor.getUniqueId()) == RegionRoles.Role.SUB_OWNER); }
     public static boolean canManageSubOwners(Player actor, ProtectedRegion region) { return canManageProtection(actor, region); }
-    public static boolean canManageFlags(Player actor, ProtectedRegion region) { return canManageProtection(actor, region); }
+    /** フラグ・保護名・カスタマイズ: 主オーナーに加えサブオーナーも可。 */
+    public static boolean canEditSettings(Player actor, ProtectedRegion region) {
+        return canManageProtection(actor, region) || (actor != null && region != null
+                && RegionRoles.roleOf(region, actor.getUniqueId()) == RegionRoles.Role.SUB_OWNER);
+    }
+    public static boolean canManageFlags(Player actor, ProtectedRegion region) { return canEditSettings(actor, region); }
     public static boolean canUseTeleport(Player actor, ProtectedRegion region) { return canViewProtection(actor, region); }
     public static boolean canManageTeleport(Player actor, ProtectedRegion region) { return canManageProtection(actor, region); }
     public static boolean canViewLogs(Player actor, ProtectedRegion region) {

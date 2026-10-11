@@ -52,11 +52,11 @@ public class ProtectionCustomizeGUI extends AbstractGUI {
         e.setCancelled(true);
         switch (e.getRawSlot()) {
             case SLOT_CATEGORY:
-                if (!ProtectionAccess.canManageProtection(getPlayer(), region)) { getPlayer().sendMessage(ChatColor.RED + "保護をカスタマイズする権限がありません。"); return; }
+                if (!ProtectionAccess.canEditSettings(getPlayer(), region)) { getPlayer().sendMessage(ChatColor.RED + "保護をカスタマイズする権限がありません。"); return; }
                 new ProtectionCategoryGUI(getPlayer(), this, region).open();
                 break;
             case SLOT_COPY:
-                if (!ProtectionAccess.canManageProtection(getPlayer(), region)) { getPlayer().sendMessage(ChatColor.RED + "保護をカスタマイズする権限がありません。"); return; }
+                if (!ProtectionAccess.canEditSettings(getPlayer(), region)) { getPlayer().sendMessage(ChatColor.RED + "保護をカスタマイズする権限がありません。"); return; }
                 new ProtectionCopySourceGUI(getPlayer(), this, region, world).open();
                 break;
             case SLOT_BACK: back(); break;

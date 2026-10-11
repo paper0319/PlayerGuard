@@ -26,10 +26,9 @@ import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
+import org.bukkit.event.player.PlayerKickEvent;
 import org.bukkit.event.player.PlayerMoveEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
-import org.bukkit.potion.PotionEffect;
-import org.bukkit.potion.PotionEffectType;
 import org.bukkit.util.Vector;
 
 import java.util.Map;
@@ -61,6 +60,11 @@ public class DeniedEntryListener implements Listener {
 
     private final Map<UUID, Long> lastTitleAt = new ConcurrentHashMap<>();
     private final Map<UUID, Long> ejectRequestedAt = new ConcurrentHashMap<>();
+    /** 直近に進入を拒否した保護。飛行判定キックの救済先を決めるのに使う。 */
+    private final Map<UUID, Denial> lastDenial = new ConcurrentHashMap<>();
+    private static final long KICK_RESCUE_WINDOW_MS = 10_000L;
+
+    private record Denial(ProtectedRegion region, long at) {}
 
     @EventHandler(priority = EventPriority.NORMAL, ignoreCancelled = true)
     public void onMove(PlayerMoveEvent event) {
@@ -76,6 +80,7 @@ public class DeniedEntryListener implements Listener {
         ProtectedRegion denied = deniedProtectionAt(player, to);
         if (denied == null) return;
 
+        lastDenial.put(player.getUniqueId(), new Denial(denied, System.currentTimeMillis()));
         boolean alreadyInside = denied.contains(BukkitAdapter.asBlockVector(from));
         boolean forceTeleport = DeniedEntryRelocation.needsForcedTeleport(
                 player.isGliding(), player.isFlying(), player.isRiptiding(),
@@ -129,9 +134,49 @@ public class DeniedEntryListener implements Listener {
         return new Location(from.getWorld(), from.getX(), to.getY(), from.getZ(), to.getYaw(), to.getPitch());
     }
 
+    /**
+     * 保護の境界で空中に留められ、サーバーの飛行判定でキックされそうなときは
+     * キックを取り消し、保護の外の安全な地点へ移す。
+     */
+    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
+    public void onKick(PlayerKickEvent event) {
+        String reason = event.getReason().toLowerCase(java.util.Locale.ROOT);
+        if (!reason.contains("fly") && !reason.contains("flight")) return;
+        Player player = event.getPlayer();
+        Denial denial = lastDenial.get(player.getUniqueId());
+        if (denial == null || System.currentTimeMillis() - denial.at() > KICK_RESCUE_WINDOW_MS) return;
+        PGScheduler scheduler = scheduler();
+        if (scheduler == null) return;
+
+        event.setCancelled(true);
+        lastDenial.remove(player.getUniqueId());
+        Location here = player.getLocation();
+        Ejection ejection = destination(player, denial.region(), here, here);
+        Location dest;
+        boolean standable = ejection != null && ejection.standable();
+        if (ejection != null) {
+            dest = ejection.location();
+        } else {
+            // 退避先が作れないときは地表か、それも無ければワールドのスポーンへ。
+            World world = here.getWorld();
+            int y = world.getHighestBlockYAt(here) + 1;
+            dest = new Location(world, here.getX(), y, here.getZ(), here.getYaw(), 0f);
+            if (denial.region().contains(dest.getBlockX(), dest.getBlockY(), dest.getBlockZ())) {
+                dest = world.getSpawnLocation();
+            }
+            standable = true;
+        }
+        eject(player, dest, standable);
+        if (standable) {
+            // 床に降りるので、落下による着地ダメージも出さない。
+            player.setFallDistance(0);
+        }
+    }
+
     @EventHandler
     public void onQuit(PlayerQuitEvent event) {
         UUID id = event.getPlayer().getUniqueId();
+        lastDenial.remove(id);
         lastTitleAt.remove(id);
         ejectRequestedAt.remove(id);
     }
@@ -145,16 +190,27 @@ public class DeniedEntryListener implements Listener {
      */
     private void eject(Player player, Location dest, boolean standable) {
         PGScheduler scheduler = scheduler();
-        if (scheduler == null || !scheduler.isRegionThreaded()) {
-            // 同期テレポートでは setTo をしてはいけない。
-            // CraftBukkit はイベント後に event.getTo() の位置へ呼び戻すため、
-            // setTo を呼ぶとここで決めた位置が上書きされる。
+        if (scheduler == null) {
             settle(player, player.teleport(dest), standable);
             return;
         }
-        // Folia 系では到着まで数 tick かかる。その間も落下速度は止めていないので、
-        // 保護の中に留まったまま動けなくなることはない。
-        player.teleportAsync(dest).thenAccept(ok -> settle(player, ok, standable));
+        // イベント内では teleport しない。WorldGuard の ENTRY 拒否がこの移動をキャンセルして
+        // 移動前の座標へ戻すため、同じ処理内のテレポートはそれに上書きされ、
+        // 空中に固定されたままサーバーの飛行判定でキックされ続ける。
+        // 次の tick に回して、巻き戻しのあとで退避先へ移す。
+        scheduler.runOnEntity(player, () -> {
+            try {
+                if (!scheduler.isRegionThreaded()) {
+                    settle(player, player.teleport(dest), standable);
+                } else {
+                    // Folia 系はリージョンスレッドで同期テレポートできない。
+                    player.teleportAsync(dest).whenComplete((ok, ex) -> settle(player, ok != null && ok, standable));
+                }
+            } catch (RuntimeException ex) {
+                ejectRequestedAt.remove(player.getUniqueId());
+                throw ex;
+            }
+        });
     }
 
     /**
@@ -210,7 +266,9 @@ public class DeniedEntryListener implements Listener {
     private static void keepFalling(Player player) {
         releaseMotion(player);
         player.setVelocity(FALLING);
-        player.addPotionEffect(new PotionEffect(PotionEffectType.SLOW_FALLING, 80, 0, false, false, false));
+        // 低速落下は付けない。落下速度が 0.01/tick まで落ちて vanilla の飛行判定（80tick）でキックされ、
+        // 再ログインしても保護内の空中に戻されて入れなくなる。
+        player.setFallDistance(0);
     }
 
     private static boolean sameBlock(Location from, Location to) {

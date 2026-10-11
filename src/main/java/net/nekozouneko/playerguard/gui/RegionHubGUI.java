@@ -73,7 +73,7 @@ public class RegionHubGUI extends AbstractGUI {
             inventory.setItem(SLOT_MEMBERS, ItemStackBuilder.of(Material.CHEST).name(ChatColor.GREEN + "メンバー管理").lore(ChatColor.GRAY + "メンバー、サブオーナー、貸出、譲渡").build());
             inventory.setItem(SLOT_BLACKLIST, ItemStackBuilder.of(Material.BARRIER).name(ChatColor.RED + "ブラックリスト管理").lore(ChatColor.GRAY + "侵入・操作を禁止するプレイヤーを管理します").build());
         }
-        if (ProtectionAccess.canManageProtection(viewer, region)) {
+        if (ProtectionAccess.canEditSettings(viewer, region)) {
             inventory.setItem(SLOT_RENAME, ItemStackBuilder.of(Material.NAME_TAG).name(ChatColor.AQUA + "保護名変更").lore(ChatColor.GRAY + "1～32文字、カラーコード不可").build());
         }
         if (ProtectionAccess.canUseTeleport(viewer, region)) {
@@ -86,7 +86,7 @@ public class RegionHubGUI extends AbstractGUI {
         if (ProtectionAccess.canViewLogs(viewer, region)) {
             inventory.setItem(SLOT_PROTECTION_LOG, ItemStackBuilder.of(Material.BOOK).name(ChatColor.YELLOW + "保護ログ").lore(ChatColor.GRAY + "訪問履歴や保護操作の履歴を確認します", ChatColor.GRAY + "クリックでログメニューを開きます").build());
         }
-        if (ProtectionAccess.canManageProtection(viewer, region)) {
+        if (ProtectionAccess.canEditSettings(viewer, region)) {
             inventory.setItem(SLOT_CUSTOMIZE, ItemStackBuilder.of(Material.PAINTING).name(ChatColor.AQUA + "保護カスタマイズ").lore(ChatColor.GRAY + "保護のカテゴリ・設定を管理します", ChatColor.GRAY + "クリックでカスタマイズメニューを開きます").build());
         }
         if (ProtectionAccess.canDeleteProtection(viewer, region)) {
@@ -115,7 +115,7 @@ public class RegionHubGUI extends AbstractGUI {
                 new BlacklistGUI(getPlayer(), this, region).open();
                 break;
             case SLOT_RENAME:
-                if (!ProtectionAccess.canManageProtection(getPlayer(), region)) { deny("保護名を変更する権限がありません。"); return; }
+                if (!ProtectionAccess.canEditSettings(getPlayer(), region)) { deny("保護名を変更する権限がありません。"); return; }
                 startRename();
                 break;
             case SLOT_TELEPORT:
@@ -127,7 +127,7 @@ public class RegionHubGUI extends AbstractGUI {
                 new ProtectionLogCategoryGUI(getPlayer(), this, region, world).open();
                 break;
             case SLOT_CUSTOMIZE:
-                if (!ProtectionAccess.canManageProtection(getPlayer(), region)) { deny("保護をカスタマイズする権限がありません。"); return; }
+                if (!ProtectionAccess.canEditSettings(getPlayer(), region)) { deny("保護をカスタマイズする権限がありません。"); return; }
                 new ProtectionCustomizeGUI(getPlayer(), this, region, world).open();
                 break;
             case SLOT_DELETE:
@@ -144,7 +144,7 @@ public class RegionHubGUI extends AbstractGUI {
     }
 
     private void startRename() {
-        if (!ProtectionAccess.canManageProtection(getPlayer(), region)) { deny("保護名を変更する権限がありません。"); return; }
+        if (!ProtectionAccess.canEditSettings(getPlayer(), region)) { deny("保護名を変更する権限がありません。"); return; }
         String before = PlayerGuard.getInstance().getProtectionNameRepository().displayName(region);
         ChatInputManager.waitFor(getPlayer(), (player, input) -> {
             if ("cancel".equalsIgnoreCase(input.trim())) { player.sendMessage(ChatColor.YELLOW + "保護名変更をキャンセルしました。"); open(); return; }
