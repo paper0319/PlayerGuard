@@ -43,11 +43,13 @@ public abstract class AbstractGUI implements Listener, InventoryHolder {
         PlayerGuard plugin = PlayerGuard.getInstance();
         if (plugin == null || !plugin.isRuntimeReady()) return;
         init();
+        // 開き直しでは openInventory が旧画面の close イベントを発火して unregister されるため、
+        // 先に開いてから登録する。逆だと GUI が無効化され、アイテムを取り出せてしまう。
+        player.openInventory(inventory);
         if (!registered) {
             Bukkit.getPluginManager().registerEvents(this, plugin);
             registered = true;
         }
-        player.openInventory(inventory);
     }
 
     protected final void navigateTo(AbstractGUI next) {
